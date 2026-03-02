@@ -1,0 +1,46 @@
+"""
+OKTAGON SAV v10.0 — Sentry Integration
+Monitoring d'erreurs production avec Sentry.io
+"""
+import os
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+
+def init_sentry():
+    """Initialize Sentry monitoring"""
+    dsn = os.getenv('SENTRY_DSN', '')
+    
+    if not dsn or 'placeholder' in dsn:
+        print('[SENTRY] DSN non configuré - monitoring désactivé (dev mode)')
+        return False
+    
+    environment = os.getenv('SENTRY_ENVIRONMENT', 'production')
+    traces_sample_rate = float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.1'))
+    
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=environment,
+        traces_sample_rate=traces_sample_rate,
+        integrations=[
+            FastApiIntegration(),
+            # AsyncPGIntegration(),
+        ],
+        # Release tracking
+        release=f'oktagon-sav@{os.getenv("APP_VERSION", "10.0")}',
+        
+        # Performance monitoring
+        enable_tracing=True,
+        
+        # Error filtering
+        ignore_errors=[
+            'KeyboardInterrupt',
+            'SystemExit',
+        ],
+        
+        # User context
+        send_default_pii=False,  # Privacy: no PII sent
+    )
+    
+    print(f'[SENTRY] ✅ Monitoring actif - env={environment}')
+    return True

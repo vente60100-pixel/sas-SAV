@@ -1,0 +1,43 @@
+# Secrets
+.env
+.env.local
+.env.backup*
+.env.emergency
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.pyc
+venv/
+env/
+.venv/
+
+# Logs
+logs/*.log
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System
+.DS_Store
+Thumbs.db
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Node (pour le frontend)
+node_modules/
+dist/
+build/

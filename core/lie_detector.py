@@ -1,0 +1,111 @@
+"""
+OKTAGON SAV - Détecteur de mensonges IA
+Bloque AVANT envoi si l'IA invente des promesses.
+"""
+import re
+from typing import Tuple, List
+
+# ═══════════════════════════════════════════════════════════
+# PHRASES INTERDITES (Mensonges fréquents)
+# ═══════════════════════════════════════════════════════════
+
+FORBIDDEN_PHRASES = [
+    # Promesses temporelles impossibles
+    (r'aujourd.?hui m[eê]me', 'TEMPS_IMPOSSIBLE', "Ne pas promettre 'aujourd'hui même'"),
+    (r'dans (les |l.)?prochaines? heures?', 'TEMPS_IMPOSSIBLE', "Ne pas promettre 'prochaines heures'"),
+    (r'ce matin m[eê]me', 'TEMPS_IMPOSSIBLE', "Ne pas promettre 'ce matin même'"),
+    (r'cet? apr[eè]s.?midi', 'TEMPS_IMPOSSIBLE', "Ne pas promettre 'cet après-midi'"),
+    (r'd[eè]s maintenant', 'TEMPS_IMPOSSIBLE', "Ne pas promettre 'dès maintenant'"),
+    (r'[aà] l.instant', 'TEMPS_IMPOSSIBLE', "Ne pas promettre 'à l'instant'"),
+    (r'imm[eé]diatement m[eê]me', 'TEMPS_IMPOSSIBLE', "Ne pas promettre 'immédiatement'"),
+    
+    # Actions humaines inventées
+    (r'(je|j.)ai personnellement', 'ACTION_HUMAINE', "L'IA ne peut pas agir personnellement"),
+    (r'je viens de (contacter|relancer|v[eé]rifier)', 'ACTION_HUMAINE', "L'IA ne peut pas contacter/relancer"),
+    (r'(je|j.)ai relay[eé]', 'ACTION_HUMAINE', "L'IA ne peut pas relayer"),
+    (r'(je|j.)ai transmis [aà] (la direction|notre [eé]quipe|mon responsable)', 'ACTION_HUMAINE', "L'IA ne peut pas transmettre"),
+    (r'(je|j.)ai fait remonter', 'ACTION_HUMAINE', "L'IA ne peut pas faire remonter"),
+    (r'mon responsable (va|est en train)', 'ACTION_HUMAINE', "Pas de responsable humain mentionné"),
+    
+    # Urgence inventée
+    (r'(en |d.)urgence absolue', 'URGENCE_INVENTEE', "Ne pas inventer 'urgence absolue'"),
+    (r'priorit[eé] absolue (confirm[eé]e|garantie)', 'URGENCE_INVENTEE', "Ne pas inventer priorité absolue"),
+    (r'en cours de traitement par', 'STATUS_INVENTE', "Ne pas inventer traitement en cours"),
+    
+    # Mentions de transporteur (interdit politique OKTAGON)
+    (r'colissimo', 'TRANSPORTEUR', "Ne jamais mentionner le transporteur"),
+    (r'chronopost', 'TRANSPORTEUR', "Ne jamais mentionner le transporteur"),
+    (r'la poste', 'TRANSPORTEUR', "Ne jamais mentionner le transporteur"),
+    (r'd[hp]l', 'TRANSPORTEUR', "Ne jamais mentionner le transporteur"),
+    (r'fedex', 'TRANSPORTEUR', "Ne jamais mentionner le transporteur"),
+    (r'ups\b', 'TRANSPORTEUR', "Ne jamais mentionner le transporteur"),
+    (r'mondial relay', 'TRANSPORTEUR', "Ne jamais mentionner le transporteur"),
+    (r'colis priv[eé]', 'TRANSPORTEUR', "Ne jamais mentionner le transporteur"),
+    
+    # Promesses de remboursement (seul humain peut valider)
+    (r'(vous serez|nous allons vous) rembours', 'PROMESSE_REMBOURSEMENT', "Seul un humain peut promettre remboursement"),
+    (r'remboursement (confirm[eé]|valid[eé]|effectu[eé])', 'PROMESSE_REMBOURSEMENT', "Remboursement non confirmé"),
+    (r'nous (avons|venons de) proc[eé]d[eé] au remboursement', 'PROMESSE_REMBOURSEMENT', "Remboursement non effectué"),
+    
+    # Promesses de renvoi
+    (r'nous (avons|allons) (renvoyer|r[eé][eé]xp[eé]dier)', 'PROMESSE_RENVOI', "Seul un humain peut promettre renvoi"),
+    (r'(un |le )remplacement (a [eé]t[eé]|sera) envoy[eé]', 'PROMESSE_RENVOI', "Remplacement non confirmé"),
+]
+
+
+def detect_lies(response_text: str) -> Tuple[bool, List[dict]]:
+    """
+    Détecte si l'IA ment dans sa réponse.
+    
+    Returns:
+        (is_clean, violations)
+        - is_clean: True si aucun mensonge, False sinon
+        - violations: Liste des mensonges détectés
+    """
+    violations = []
+    text_lower = response_text.lower()
+    
+    for pattern, violation_type, explanation in FORBIDDEN_PHRASES:
+        matches = re.finditer(pattern, text_lower, re.IGNORECASE)
+        for match in matches:
+            violations.append({
+                'type': violation_type,
+                'phrase': match.group(0),
+                'explanation': explanation,
+                'position': match.start()
+            })
+    
+    is_clean = len(violations) == 0
+    return is_clean, violations
+
+
+def format_violation_report(violations: List[dict]) -> str:
+    """Format violations pour logs."""
+    if not violations:
+        return "Aucune violation"
+    
+    report = f"{len(violations)} mensonge(s) détecté(s):\n"
+    for v in violations:
+        report += f"  - [{v['type']}] '{v['phrase']}' → {v['explanation']}\n"
+    return report.strip()
+
+
+# ═══════════════════════════════════════════════════════════
+# EXEMPLE D'UTILISATION
+# ═══════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    # Test 1 : Réponse propre
+    clean = "Bonjour, votre commande a été expédiée le 25/02. Délai estimé : 12-15 jours."
+    is_clean, violations = detect_lies(clean)
+    print(f"Test 1 (propre): {is_clean} - {violations}")
+    
+    # Test 2 : Mensonges multiples
+    lies = """
+    Bonjour, je viens de relancer personnellement votre dossier en urgence absolue.
+    Mon responsable va traiter cela aujourd'hui même et nous allons vous rembourser
+    immédiatement. Votre colis sera renvoyé par Colissimo dans les prochaines heures.
+    """
+    is_clean, violations = detect_lies(lies)
+    print(f"\nTest 2 (mensonges): {is_clean}")
+    print(format_violation_report(violations))
