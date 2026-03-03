@@ -18,7 +18,7 @@ from config import config
 from logger import logger
 from storage.database import Database
 from storage.repos import Repos
-from storage.schema import run_migration, run_migration_v41, run_migration_v50, run_migration_v105
+from storage.schema import create_base_tables, run_migration, run_migration_v41, run_migration_v50, run_migration_v105
 from connectors.ecommerce.shopify import ShopifyConnector
 from connectors.channels.email import EmailConnector
 from connectors.ai.claude import ClaudeConnector
@@ -47,6 +47,9 @@ async def main():
         pool_min=config.database.pool_min,
         pool_max=config.database.pool_max
     )
+
+    # Tables de base (processed_emails, escalations, etc.)
+    await create_base_tables(db)
 
     # Migration (crée table tenants + ajoute tenant_id si besoin)
     await run_migration(db)

@@ -25,20 +25,27 @@ class Database:
                       user: str, password: str,
                       pool_min: int = 2, pool_max: int = 10) -> None:
         """Établir la connexion au pool PostgreSQL avec SSL/TLS"""
-        ssl_context = ssl.create_default_context()
+        ssl_mode = os.getenv('POSTGRES_SSL_MODE', 'prefer')
 
-        # Production: vérification stricte. Dev: accept self-signed
-        if os.getenv('POSTGRES_SSL_VERIFY', 'true').lower() in ('false', '0', 'no'):
+        if ssl_mode == 'disable':
+            ssl_param = False
+        elif ssl_mode == 'require':
+            ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
-        # else: ssl_context defaults to CERT_REQUIRED + check_hostname=True
+            ssl_param = ssl_context
+        elif ssl_mode == 'verify-full':
+            ssl_param = ssl.create_default_context()
+        else:
+            # 'prefer': essayer avec SSL, fallback sans
+            ssl_param = 'prefer'
 
         self.pool = await asyncpg.create_pool(
             host=host, port=port, database=database,
             user=user, password=password,
             min_size=pool_min, max_size=pool_max,
             command_timeout=60,
-            ssl=ssl_context
+            ssl=ssl_param
         )
         logger.info('Pool DB créé avec SSL/TLS', extra={'action': 'db_connect'})
 

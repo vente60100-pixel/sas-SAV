@@ -4,6 +4,138 @@ Migration : ajoute la table tenants + tenant_id sur les tables existantes.
 """
 import asyncpg
 
+# ══════════════════════════════════════════════════════════
+# TABLES DE BASE (créées avant les migrations)
+# ══════════════════════════════════════════════════════════
+
+BASE_TABLES = [
+    """CREATE TABLE IF NOT EXISTS processed_emails (
+        id SERIAL PRIMARY KEY,
+        email_hash TEXT UNIQUE,
+        email_from TEXT NOT NULL,
+        email_subject TEXT,
+        email_body_preview TEXT,
+        language TEXT DEFAULT 'fr',
+        has_attachments BOOLEAN DEFAULT false,
+        attachment_count INTEGER DEFAULT 0,
+        conversation_step TEXT DEFAULT 'step1_category',
+        collected_data JSONB DEFAULT '{}',
+        category TEXT,
+        message_id TEXT,
+        parent_email_id INTEGER,
+        response_sent BOOLEAN DEFAULT false,
+        rerouted_from TEXT,
+        response_text TEXT,
+        email_to TEXT,
+        brain_category TEXT,
+        brain_confidence NUMERIC,
+        detection_method TEXT,
+        processing_time_ms INTEGER,
+        urgency_level TEXT,
+        response_quality TEXT,
+        satisfaction_score NUMERIC,
+        satisfaction_source TEXT,
+        client_reply_sentiment TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS escalations (
+        id SERIAL PRIMARY KEY,
+        email_id INTEGER,
+        email_from TEXT NOT NULL,
+        category TEXT,
+        reason TEXT,
+        subject TEXT,
+        resolved BOOLEAN DEFAULT false,
+        admin_action TEXT,
+        admin_response TEXT,
+        resolved_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS cancellations (
+        id SERIAL PRIMARY KEY,
+        email_from TEXT NOT NULL,
+        order_number TEXT,
+        email_id INTEGER,
+        escalation_id INTEGER,
+        fulfillment_status TEXT,
+        items_json JSONB DEFAULT '[]',
+        refundable_amount NUMERIC DEFAULT 0,
+        non_refundable_amount NUMERIC DEFAULT 0,
+        case_type TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS address_changes (
+        id SERIAL PRIMARY KEY,
+        email_id INTEGER,
+        escalation_id INTEGER,
+        email_from TEXT NOT NULL,
+        order_number TEXT,
+        old_address TEXT,
+        new_address TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS returns_tracking (
+        id SERIAL PRIMARY KEY,
+        email_from TEXT NOT NULL,
+        order_number TEXT,
+        tracking_number TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS outgoing_emails (
+        id SERIAL PRIMARY KEY,
+        email_to TEXT NOT NULL,
+        email_type TEXT DEFAULT 'auto',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS usine_requests (
+        id SERIAL PRIMARY KEY,
+        email_from TEXT,
+        request_type TEXT,
+        details JSONB DEFAULT '{}',
+        status TEXT DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS auto_replies (
+        id SERIAL PRIMARY KEY,
+        email_from TEXT,
+        email_to TEXT,
+        subject TEXT,
+        body TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS attestations (
+        id SERIAL PRIMARY KEY,
+        email_from TEXT,
+        order_number TEXT,
+        attestation_type TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS conversation_history (
+        id SERIAL PRIMARY KEY,
+        email_from TEXT,
+        role TEXT,
+        content TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS admin_actions (
+        id SERIAL PRIMARY KEY,
+        action_type TEXT,
+        target_email TEXT,
+        details JSONB DEFAULT '{}',
+        admin_user TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+]
+
+
+async def create_base_tables(db):
+    """Crée toutes les tables de base (idempotent)."""
+    from logger import logger
+    for sql in BASE_TABLES:
+        await db.execute(sql)
+    logger.info("Tables de base créées/vérifiées", extra={"action": "base_tables"})
+
+
 TENANT_TABLE = """
 CREATE TABLE IF NOT EXISTS tenants (
     id TEXT PRIMARY KEY,
