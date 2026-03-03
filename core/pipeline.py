@@ -332,6 +332,9 @@ class Pipeline:
                     logger.info(f"Shopify form → {real_email}",
                                 extra={"action": "shopify_form_detected"})
                 else:
+                    logger.info(f"Shopify form sans email extractible — ignoré",
+                                extra={"action": "shopify_form_no_email"})
+                    ticket.is_spam = True
                     return
             else:
                 logger.info(f"Shopify notif ignorée", extra={"action": "shopify_notif_ignored"})
@@ -700,10 +703,14 @@ class Pipeline:
         # Les exemples appris sont chargés dans _unified_brain (après classification)
         ticket.learned_examples = ""
 
-        # Urgence
+        # Urgence — détecter puis réappliquer le boost émotionnel si nécessaire
+        emotion_boosted = getattr(ticket, 'urgency_level', None) == 'HIGH'
         ticket.urgency_level = detect_urgency(
             ticket.subject, ticket.body, ticket.client_profile
         )
+        # Réappliquer le boost émotionnel si detect_urgency l'a écrasé
+        if emotion_boosted and ticket.urgency_level not in ('CRITICAL', 'HIGH'):
+            ticket.urgency_level = 'HIGH'
         if ticket.urgency_level in ('CRITICAL', 'HIGH') and self.notifier:
             await self.notifier(
                 f"🔴 <b>URGENCE {ticket.urgency_level}</b>\n"
@@ -817,7 +824,7 @@ class Pipeline:
         # Formater pour l'IA
         conversation_text = format_conversation_for_ai(
             conversation, 
-            ticket.customer_name or Client
+            ticket.customer_name or 'Client'
         )
         
         # Enrichir profil client automatiquement
@@ -1179,9 +1186,8 @@ class Pipeline:
                 sent = False
             else:
                 # Vérifier si on a déjà envoyé à ce client récemment
-                recent_sent = await self.repos.db.pool.fetchval(
-                    "SELECT COUNT(*) FROM emails WHERE email_from =  AND sent_at > NOW() - INTERVAL '1 hour' AND tenant_id = ",
-                    ticket.email_from, self.tenant.id
+                recent_sent = await self.repos.count_recent_responses(
+                    self.tenant.id, ticket.email_from, hours=1
                 )
                 if recent_sent and recent_sent > 2:
                     logger.warning(f"DUPLICATE BLOQUÉ: {recent_sent} emails déjà envoyés à {ticket.email_from} dans la dernière heure", extra={"action": "rate_limit_blocked"})
@@ -1234,10 +1240,6 @@ class Pipeline:
                     prenom=ticket.customer_name,
                     dernier_ton=getattr(ticket, 'emotion', {}).get('primary_emotion'),
                     derniere_commande=ticket.order_number,
-                    tags=profile.get('tags') or None,
-                    loyalty_score=profile.get('loyalty_score'),
-                    conversation_state=profile.get('conversation_state'),
-                    avg_satisfaction=profile.get('avg_satisfaction'),
                 )
                 # Sauvegarder l'émotion dans processed_emails
                 emotion = getattr(ticket, 'emotion', None)

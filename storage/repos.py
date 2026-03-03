@@ -80,10 +80,24 @@ class Repos:
                 "UPDATE processed_emails SET response_sent = true WHERE id = $1", email_id
             )
 
+    # Colonnes autorisées dans update_email (whitelist anti-injection SQL)
+    _ALLOWED_UPDATE_COLUMNS = {
+        'conversation_step', 'collected_data', 'category', 'response_sent',
+        'response_text', 'email_to', 'brain_category', 'brain_confidence',
+        'detection_method', 'processing_time_ms', 'urgency_level',
+        'response_quality', 'satisfaction_score', 'satisfaction_source',
+        'client_reply_sentiment', 'language', 'rerouted_from',
+        'has_attachments', 'attachment_count', 'message_id', 'parent_email_id',
+    }
+
     async def update_email(self, email_id: int, **kwargs):
-        """Met à jour des champs arbitraires d'un email."""
+        """Met à jour des champs arbitraires d'un email (colonnes whitelistées)."""
         if not kwargs:
             return
+        # Sécurité : valider que toutes les colonnes sont autorisées
+        for key in kwargs:
+            if key not in self._ALLOWED_UPDATE_COLUMNS:
+                raise ValueError(f"Colonne '{key}' non autorisée dans update_email")
         sets = []
         vals = []
         for i, (key, val) in enumerate(kwargs.items(), 1):
@@ -190,10 +204,14 @@ class Repos:
 
     async def can_send(self, tenant_id: str, email_to: str,
                        max_per_hour: int = 3, max_per_day: int = 8) -> bool:
-        """Vérifie le rate limit pour cet email destinataire."""
+        """Vérifie le rate limit pour cet email destinataire.
+
+        Compte les réponses envoyées via email_from (= adresse client)
+        car email_to n'est pas toujours renseigné dans processed_emails.
+        """
         row_1h = await self.db.fetch_one(
             """SELECT COUNT(*) as c FROM processed_emails
-               WHERE tenant_id = $1 AND email_to = $2
+               WHERE tenant_id = $1 AND email_from = $2
                AND response_sent = true
                AND created_at > NOW() - INTERVAL '1 hour'""",
             tenant_id, email_to
@@ -202,7 +220,7 @@ class Repos:
             return False
         row_24h = await self.db.fetch_one(
             """SELECT COUNT(*) as c FROM processed_emails
-               WHERE tenant_id = $1 AND email_to = $2
+               WHERE tenant_id = $1 AND email_from = $2
                AND response_sent = true
                AND created_at > NOW() - INTERVAL '24 hours'""",
             tenant_id, email_to
@@ -322,27 +340,19 @@ class Repos:
     # ══════════════════════════════════════════════════════════
 
     async def upsert_client_profile(self, tenant_id: str, email: str, prenom: str = None,
-                                     dernier_ton: str = None, derniere_commande: str = None,
-                                     tags: list = None, loyalty_score: int = None,
-                                     conversation_state: str = None, avg_satisfaction: float = None):
-        """Crée ou met à jour le profil client persistant (v7.2 — enrichi)."""
+                                     dernier_ton: str = None, derniere_commande: str = None):
+        """Crée ou met à jour le profil client persistant."""
         await self.db.execute("""
             INSERT INTO client_profiles (tenant_id, email, prenom, dernier_ton,
-                derniere_commande, tags, loyalty_score, conversation_state,
-                avg_satisfaction, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+                derniere_commande, updated_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
             ON CONFLICT (tenant_id, email) DO UPDATE SET
                 prenom = COALESCE($3, client_profiles.prenom),
                 dernier_ton = COALESCE($4, client_profiles.dernier_ton),
                 derniere_commande = COALESCE($5, client_profiles.derniere_commande),
-                tags = COALESCE($6, client_profiles.tags),
-                loyalty_score = COALESCE($7, client_profiles.loyalty_score),
-                conversation_state = COALESCE($8, client_profiles.conversation_state),
-                avg_satisfaction = COALESCE($9, client_profiles.avg_satisfaction),
                 nb_contacts = client_profiles.nb_contacts + 1,
                 updated_at = NOW()
-        """, tenant_id, email, prenom, dernier_ton, derniere_commande,
-             tags, loyalty_score, conversation_state, avg_satisfaction)
+        """, tenant_id, email, prenom, dernier_ton, derniere_commande)
 
     async def get_full_client_profile(self, tenant_id: str, email: str) -> dict:
         """Profil client complet : DB profile + stats emails + escalations."""

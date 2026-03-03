@@ -137,14 +137,14 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
             SELECT
                 category,
                 COUNT(*) as count,
-                ROUND(AVG(confidence_score)::numeric, 2) as avg_confidence,
-                ROUND(MIN(confidence_score)::numeric, 2) as min_confidence,
-                ROUND(MAX(confidence_score)::numeric, 2) as max_confidence
+                ROUND(AVG(brain_confidence)::numeric, 2) as avg_confidence,
+                ROUND(MIN(brain_confidence)::numeric, 2) as min_confidence,
+                ROUND(MAX(brain_confidence)::numeric, 2) as max_confidence
             FROM processed_emails
             WHERE tenant_id = $1
             AND created_at > NOW() - INTERVAL '{interval}'
             AND category IS NOT NULL
-            AND confidence_score IS NOT NULL
+            AND brain_confidence IS NOT NULL
             GROUP BY category
             ORDER BY count DESC
         """, _default_tenant_id)
@@ -153,8 +153,8 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
         escalation_rate = await _db.fetch_one(f"""
             SELECT
                 COUNT(*) as total_emails,
-                COUNT(CASE WHEN escalated = true THEN 1 END) as escalated,
-                ROUND(100.0 * COUNT(CASE WHEN escalated = true THEN 1 END) / NULLIF(COUNT(*), 0), 1) as escalation_rate
+                COUNT(CASE WHEN conversation_step = 'escalated_to_human' THEN 1 END) as escalated,
+                ROUND(100.0 * COUNT(CASE WHEN conversation_step = 'escalated_to_human' THEN 1 END) / NULLIF(COUNT(*), 0), 1) as escalation_rate
             FROM processed_emails
             WHERE tenant_id = $1
             AND created_at > NOW() - INTERVAL '{interval}'
@@ -168,7 +168,7 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
             FROM escalations
             WHERE tenant_id = $1
             AND created_at > NOW() - INTERVAL '{interval}'
-            AND status = 'pending'
+            AND resolved = false
             GROUP BY reason
             ORDER BY count DESC
             LIMIT 5
@@ -180,8 +180,8 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
                 DATE(created_at) as date,
                 COUNT(*) as total,
                 COUNT(CASE WHEN category != 'AUTRE' THEN 1 END) as categorized,
-                ROUND(AVG(confidence_score)::numeric, 2) as avg_confidence,
-                COUNT(CASE WHEN escalated = true THEN 1 END) as escalated
+                ROUND(AVG(brain_confidence)::numeric, 2) as avg_confidence,
+                COUNT(CASE WHEN conversation_step = 'escalated_to_human' THEN 1 END) as escalated
             FROM processed_emails
             WHERE tenant_id = $1
             AND created_at > NOW() - INTERVAL '7 DAYS'
@@ -194,9 +194,9 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
         realtime = await _db.fetch_one("""
             SELECT
                 COUNT(*) as emails_24h,
-                COUNT(CASE WHEN ai_response_sent = true THEN 1 END) as ai_responses,
-                ROUND(100.0 * COUNT(CASE WHEN ai_response_sent = true THEN 1 END) / NULLIF(COUNT(*), 0), 1) as ai_response_rate,
-                ROUND(AVG(EXTRACT(EPOCH FROM (responded_at - created_at)))::numeric, 0) as avg_response_time_seconds
+                COUNT(CASE WHEN response_sent = true THEN 1 END) as ai_responses,
+                ROUND(100.0 * COUNT(CASE WHEN response_sent = true THEN 1 END) / NULLIF(COUNT(*), 0), 1) as ai_response_rate,
+                ROUND(AVG(processing_time_ms)::numeric / 1000, 0) as avg_response_time_seconds
             FROM processed_emails
             WHERE tenant_id = $1
             AND created_at > NOW() - INTERVAL '24 HOURS'
@@ -506,9 +506,10 @@ if os.path.isdir(_frontend_dir):
     @app.get("/{path:path}")
     async def serve_react(path: str):
         import pathlib
-        file_path = pathlib.Path(_frontend_dir) / path
-        if file_path.is_file():
-            # Servir le fichier statique
+        frontend_root = pathlib.Path(_frontend_dir).resolve()
+        file_path = (frontend_root / path).resolve()
+        # Sécurité : empêcher path traversal (../../etc/passwd)
+        if file_path.is_file() and str(file_path).startswith(str(frontend_root)):
             return FileResponse(str(file_path))
         # Sinon servir index.html (React Router)
         return FileResponse(os.path.join(_frontend_dir, 'index.html'))

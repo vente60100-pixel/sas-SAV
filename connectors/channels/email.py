@@ -33,12 +33,13 @@ class EmailConnector(ChannelConnector):
 
     async def fetch_messages(self) -> list[IncomingMessage]:
         """Fetch emails via IMAP (exécuté dans un thread)."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._fetch_sync)
 
     def _fetch_sync(self) -> list[IncomingMessage]:
         """Fetch synchrone IMAP — lit TOUS les emails (lus + non lus) des dernières 24h."""
         messages = []
+        mail = None
         try:
             mail = imaplib.IMAP4_SSL(self.imap_host, timeout=15)
             mail.login(self.address, self.password)
@@ -133,10 +134,14 @@ class EmailConnector(ChannelConnector):
                                 self._seen_ids = {k: True for k in keys[-1000:]}
                     except (UnicodeDecodeError, ValueError, KeyError):
                         continue
-
-            mail.logout()
         except (OSError, imaplib.IMAP4.error) as e:
             logger.error(f'Erreur IMAP fetch: {e}', extra={'action': 'imap_error'})
+        finally:
+            if mail:
+                try:
+                    mail.logout()
+                except (OSError, imaplib.IMAP4.error):
+                    pass
         return messages
 
     def _decode_header(self, header: str) -> str:
@@ -212,7 +217,7 @@ class EmailConnector(ChannelConnector):
     async def send_message(self, to: str, subject: str, html_body: str,
                            in_reply_to: Optional[str] = None) -> bool:
         """Envoie un email via SMTP (exécuté dans un thread)."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._send_sync, to, subject, html_body, in_reply_to)
 
     def _send_sync(self, to: str, subject: str, html_body: str,

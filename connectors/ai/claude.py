@@ -247,13 +247,13 @@ class ClaudeConnector(AIConnector):
             logger.error("Timeout cerveau intelligent (API Claude ne répond pas)",
                          extra={"action": "brain_timeout"})
             return self._empty_response()
-        except anthropic.APIError as e:
-            logger.error(f"Erreur API Claude: {e}",
-                         extra={"action": "brain_api_error", "error": str(e)})
-            return self._empty_response()
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
             logger.error(f"Erreur auth Claude: {e}",
                          extra={"action": "brain_auth_error", "error": str(e)})
+            return self._empty_response()
+        except anthropic.APIError as e:
+            logger.error(f"Erreur API Claude: {e}",
+                         extra={"action": "brain_api_error", "error": str(e)})
             return self._empty_response()
 
     async def unified_process(self, prompt: str) -> dict:
