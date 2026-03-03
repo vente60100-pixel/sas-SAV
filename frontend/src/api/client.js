@@ -3,7 +3,6 @@ const API_BASE = '/api';
 function getAuthHeaders() {
   const token = localStorage.getItem('auth_token');
   if (token) return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-  // Fallback Basic Auth
   const creds = localStorage.getItem('auth_basic');
   if (creds) return { 'Authorization': `Basic ${creds}`, 'Content-Type': 'application/json' };
   return { 'Content-Type': 'application/json' };
@@ -23,6 +22,7 @@ async function apiFetch(path, options = {}) {
   return res.json();
 }
 
+// Auth
 export function login(username, password) {
   const basic = btoa(`${username}:${password}`);
   localStorage.setItem('auth_basic', basic);
@@ -39,7 +39,18 @@ export function isLoggedIn() {
 
 // Stats
 export const getStats = (period = 'today') => apiFetch(`/stats?period=${period}`);
-export const getStatsByCategory = (period = 'all') => apiFetch(`/stats?period=${period}`);
+
+// Intelligence
+export const getIntelligence = (period = '7d') => apiFetch(`/intelligence?period=${period}`);
+
+// Metrics
+export const getMetrics = () => apiFetch('/metrics');
+
+// Health
+export const getHealth = () => apiFetch('/health');
+
+// Circuit breakers
+export const getCircuitBreakers = () => apiFetch('/circuit-breakers');
 
 // Clients
 export const getClients = (search = '', limit = 50, offset = 0) =>
@@ -52,11 +63,14 @@ export const getPipeline = (limit = 50, offset = 0, category = '') =>
 
 // Escalations
 export const getEscalations = () => apiFetch('/escalations');
+export const getEscalationDetail = (id) => apiFetch(`/escalations/${id}`);
 export const resolveEscalation = (id, action = 'resolved', responseText = null) =>
   apiFetch(`/escalations/${id}/resolve`, {
     method: 'POST',
     body: JSON.stringify({ action, response_text: responseText }),
   });
+export const getEscalationAiDraft = (id) =>
+  apiFetch(`/escalations/${id}/ai-draft`, { method: 'POST' });
 
 // Chat
 export const sendChatMessage = (message) =>
@@ -70,3 +84,8 @@ export const sendEmail = (to, subject, body) =>
 export const getSettings = () => apiFetch('/settings');
 export const saveSettings = (data) =>
   apiFetch('/settings', { method: 'POST', body: JSON.stringify(data) });
+export const settingsAiAssist = (message, currentSettings) =>
+  apiFetch('/settings/ai-assist', {
+    method: 'POST',
+    body: JSON.stringify({ message, current_settings: currentSettings }),
+  });
