@@ -2,6 +2,7 @@
 Tests unitaires pour storage/database.py
 Coverage cible : 70%
 """
+import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
 from storage.database import Database
@@ -59,10 +60,11 @@ class TestDatabaseConnect:
     
     @pytest.mark.asyncio
     async def test_connect_with_ssl_context(self, db):
-        """Connect crée un contexte SSL correct"""
-        with patch('asyncpg.create_pool', new_callable=AsyncMock) as mock_create:
+        """Connect crée un contexte SSL correct en mode require"""
+        with patch('asyncpg.create_pool', new_callable=AsyncMock) as mock_create, \
+             patch.dict(os.environ, {'POSTGRES_SSL_MODE': 'require'}):
             await db.connect('localhost', 5432, 'db', 'user', 'pass')
-            
+
             ssl_context = mock_create.call_args.kwargs['ssl']
             assert ssl_context.check_hostname is False
             assert ssl_context.verify_mode == 0  # CERT_NONE

@@ -75,7 +75,7 @@ class ShopifyConnector(EcommerceConnector):
             )
         except CircuitBreakerOpenError as e:
             logger.error(f"Shopify circuit breaker OPEN: {e}")
-            metrics.record_shopify_call(success=False)
+            metrics.record_shopify_call(duration_ms=0, success=False)
             return None
 
     async def _get_order_internal(self, order_number: str) -> Optional[dict]:

@@ -351,6 +351,8 @@ V105_COLUMNS = [
     "ALTER TABLE escalations ADD COLUMN IF NOT EXISTS admin_action TEXT",
     "ALTER TABLE escalations ADD COLUMN IF NOT EXISTS admin_response TEXT",
     "ALTER TABLE escalations ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ",
+    "ALTER TABLE processed_emails ADD COLUMN IF NOT EXISTS emotion_detected TEXT",
+    "ALTER TABLE processed_emails ADD COLUMN IF NOT EXISTS emotion_score NUMERIC",
 ]
 
 

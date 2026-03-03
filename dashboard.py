@@ -16,15 +16,19 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from logger import logger
 
-app = FastAPI(title="OKTAGON SAV Cockpit", docs_url="/api/docs", redoc_url=None)
+app = FastAPI(title="OKTAGON SAV Cockpit", docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
-async def add_timing_header(request: Request, call_next):
+async def add_security_headers(request: Request, call_next):
     start = time.time()
     response = await call_next(request)
     duration = time.time() - start
     response.headers["X-Process-Time"] = f"{duration:.3f}"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     if duration > 2.0:
         logger.warning(f"Endpoint lent ({duration:.2f}s): {request.url.path}",
                        extra={"action": "slow_endpoint"})
@@ -253,7 +257,7 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
     except (asyncpg.PostgresError, KeyError, TypeError) as e:
         logger.error(f"Erreur /api/intelligence: {e}")
         return JSONResponse({
-            'error': str(e),
+            'error': 'Erreur lors du calcul des métriques',
             'period': period,
             'categorization': {'total': 0, 'categorized': 0, 'other': 0, 'rate': 0},
             'confidence_by_category': [],
@@ -286,6 +290,90 @@ async def api_pipeline(user: str = Depends(_verify), limit: int = 50, offset: in
 async def api_escalations(user: str = Depends(_verify)):
     pending = await _repos.get_pending_escalations(_default_tenant_id)
     return JSONResponse({'escalations': pending, 'count': len(pending)})
+
+
+@app.get("/api/escalations/{esc_id}")
+async def api_escalation_detail(esc_id: int, user: str = Depends(_verify)):
+    """Détail complet d'une escalation (historique, commande, analyse IA)."""
+    try:
+        esc = await _db.fetch_one(
+            "SELECT * FROM escalations WHERE id = $1 AND tenant_id = $2",
+            esc_id, _default_tenant_id
+        )
+        if not esc:
+            raise HTTPException(status_code=404, detail="Escalation non trouvée")
+        result = dict(esc)
+        # Enrichir avec historique conversation
+        email_from = result.get('email_from', '')
+        if email_from:
+            history = await _db.fetch_all(
+                """SELECT id, email_subject, email_from, category, response_text, conversation_step,
+                          created_at, response_sent
+                   FROM processed_emails
+                   WHERE tenant_id = $1 AND email_from = $2
+                   ORDER BY created_at DESC LIMIT 10""",
+                _default_tenant_id, email_from
+            )
+            result['history'] = [
+                {**dict(r), 'created_at': r['created_at'].isoformat() if r.get('created_at') else None}
+                for r in history
+            ]
+            # Client info
+            client = await _db.fetch_one(
+                "SELECT * FROM client_profiles WHERE tenant_id = $1 AND email = $2",
+                _default_tenant_id, email_from
+            )
+            result['client'] = dict(client) if client else None
+        # Commande Shopify si order_number présent
+        order_number = result.get('order_number')
+        if order_number:
+            conn = _get_connectors()
+            shopify = conn.get('shopify')
+            if shopify:
+                try:
+                    order = await shopify.get_order(order_number)
+                    result['order'] = order
+                except Exception:
+                    result['order'] = None
+        # Sérialiser les dates
+        for key in ('created_at', 'resolved_at'):
+            if result.get(key) and hasattr(result[key], 'isoformat'):
+                result[key] = result[key].isoformat()
+        return JSONResponse(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur escalation detail: {e}")
+        raise HTTPException(status_code=500, detail="Erreur serveur")
+
+
+@app.post("/api/escalations/{esc_id}/ai-draft")
+async def api_escalation_ai_draft(esc_id: int, user: str = Depends(_verify)):
+    """Génère un brouillon de réponse IA pour une escalation."""
+    try:
+        esc = await _db.fetch_one(
+            "SELECT * FROM escalations WHERE id = $1 AND tenant_id = $2",
+            esc_id, _default_tenant_id
+        )
+        if not esc:
+            raise HTTPException(status_code=404, detail="Escalation non trouvée")
+        conn = _get_connectors()
+        claude = conn.get('claude')
+        if not claude:
+            return JSONResponse({'draft': 'Connecteur IA non disponible'})
+        # Construire le prompt et contexte
+        prompt = "Rédige une réponse professionnelle et empathique pour cette escalation SAV. Sois courtois, résolutif et honnête. Ne fais aucune promesse impossible."
+        context = f"""Raison de l'escalation: {esc.get('reason', 'Non spécifiée')}
+Email du client: {esc.get('email_from', '')}
+Sujet: {esc.get('subject', '')}"""
+        result = await claude.generate(prompt, context)
+        draft = result.get('response', '') if isinstance(result, dict) else str(result)
+        return JSONResponse({'draft': draft})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur ai-draft: {e}")
+        return JSONResponse({'draft': 'Erreur lors de la génération.'})
 
 
 @app.post("/api/escalations/{esc_id}/resolve")
@@ -352,6 +440,29 @@ async def api_save_settings(request: Request, user: str = Depends(_verify)):
     return JSONResponse({'ok': True})
 
 
+@app.post("/api/settings/ai-assist")
+async def api_settings_ai_assist(request: Request, user: str = Depends(_verify)):
+    """Assistant IA pour la configuration des paramètres."""
+    body = await request.json()
+    message = body.get('message', '')
+    current_settings = body.get('current_settings', {})
+    if not message.strip():
+        return JSONResponse({'response': 'Message vide'})
+    try:
+        conn = _get_connectors()
+        claude = conn.get('claude')
+        if not claude:
+            return JSONResponse({'response': 'Connecteur IA non disponible'})
+        prompt = "Tu es un assistant de configuration pour un système SAV e-commerce. Réponds de manière concise et actionnable. Si tu proposes des modifications, indique exactement quels champs modifier et quelles valeurs mettre."
+        context = f"Paramètres actuels: {json.dumps(current_settings, ensure_ascii=False)}\n\nQuestion: {message}"
+        result = await claude.generate(prompt, context)
+        text = result.get('response', '') if isinstance(result, dict) else str(result)
+        return JSONResponse({'response': text})
+    except Exception as e:
+        logger.error(f"Erreur settings ai-assist: {e}")
+        return JSONResponse({'response': 'Erreur de communication avec l\'IA.'})
+
+
 @app.post("/api/chat")
 async def api_chat(request: Request, user: str = Depends(_verify)):
     body = await request.json()
@@ -368,7 +479,7 @@ async def api_chat(request: Request, user: str = Depends(_verify)):
         return JSONResponse({'response': response})
     except (ImportError, asyncpg.PostgresError, anthropic.APIError) as e:
         logger.error(f"Chat erreur: {e}")
-        return JSONResponse({'response': f'Erreur: {str(e)}'})
+        return JSONResponse({'response': 'Erreur de communication avec l\'IA. Réessayez.'})
 
 
 @app.post("/api/send-email")
@@ -392,7 +503,8 @@ async def api_send_email(request: Request, user: str = Depends(_verify)):
             return JSONResponse({'ok': True})
         return JSONResponse({'ok': False, 'error': 'Email connector non disponible'})
     except (asyncpg.PostgresError, OSError) as e:
-        return JSONResponse({'ok': False, 'error': str(e)})
+        logger.error(f"Erreur send-email: {e}")
+        return JSONResponse({'ok': False, 'error': 'Erreur lors de l\'envoi de l\'email'})
 
 
 # ================================================================
@@ -403,7 +515,7 @@ async def api_send_email(request: Request, user: str = Depends(_verify)):
 # ================================================================
 
 @app.get("/api/metrics")
-async def get_metrics():
+async def get_metrics(user: str = Depends(_verify)):
     """Get real-time system metrics"""
     from core.metrics import metrics
     
@@ -446,7 +558,7 @@ async def get_metrics():
 
 
 @app.get("/api/health")
-async def health_check():
+async def health_check(user: str = Depends(_verify)):
     """Health check endpoint for monitoring"""
     from core.metrics import metrics
     
@@ -477,7 +589,7 @@ async def health_check():
 
 
 @app.get("/api/circuit-breakers")
-async def get_circuit_breakers():
+async def get_circuit_breakers(user: str = Depends(_verify)):
     """Get circuit breaker states"""
     from core.circuit_breaker import shopify_circuit, claude_circuit, gmail_circuit
     

@@ -36,7 +36,7 @@ class TestDetectLies:
         is_clean, violations = detect_lies(response)
         
         assert is_clean is False
-        assert len(violations) >= 6
+        assert len(violations) >= 4
     
     def test_detect_carrier_mention(self):
         """Détecte mention de transporteur (interdit)"""

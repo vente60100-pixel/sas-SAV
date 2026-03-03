@@ -88,6 +88,7 @@ class Repos:
         'response_quality', 'satisfaction_score', 'satisfaction_source',
         'client_reply_sentiment', 'language', 'rerouted_from',
         'has_attachments', 'attachment_count', 'message_id', 'parent_email_id',
+        'emotion_detected', 'emotion_score',
     }
 
     async def update_email(self, email_id: int, **kwargs):
