@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v5.0 — CERVEAU UNIFIÉ SURPUISSANT
+OKTAGON SAV v11.0 — CERVEAU UNIFIÉ SURPUISSANT
 Un seul prompt, une seule intelligence, toute la connaissance.
 
 Ce fichier remplace :

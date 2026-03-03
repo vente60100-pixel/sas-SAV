@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v7.1 — Worker Recovery
+OKTAGON SAV v11.0 — Worker Recovery
 Reprend les emails bloqués après un restart.
 Utilise pipeline.reprocess() pour sauter le filtre de dédup.
 """

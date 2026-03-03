@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v7.1 — Auto-scoring des réponses
+OKTAGON SAV v11.0 — Auto-scoring des réponses
 Évalue automatiquement la qualité de chaque réponse envoyée :
 1. Vérification données (tracking, commande, prix vs Shopify)
 2. Réaction client (satisfait, mécontent, silence)
@@ -12,6 +12,7 @@ Se branche dans le pipeline :
 import re
 import logging
 from datetime import datetime
+import asyncpg
 
 logger = logging.getLogger('oktagon')
 
@@ -252,7 +253,7 @@ async def _update_quality(db, email_id: int, quality: str,
             f"Score reponse #{email_id}: {quality}",
             extra={'action': 'response_scored', 'quality': quality}
         )
-    except Exception as e:
+    except asyncpg.PostgresError as e:
         logger.debug(f"Erreur update quality: {e}")
 
 
@@ -304,7 +305,7 @@ async def _auto_feed_example(db, tenant_id: str, email_id: int, quality: str):
                )""",
             tenant_id, category
         )
-    except Exception as e:
+    except asyncpg.PostgresError as e:
         logger.debug(f"Erreur auto-feed: {e}")
 
 
@@ -373,7 +374,7 @@ async def learn_from_escalation(db, tenant_id: str, escalation_id: int, admin_re
             """SELECT e.email_from, e.category, pe.email_body_preview, pe.brain_category
                FROM escalations e
                LEFT JOIN processed_emails pe ON pe.id = e.email_id
-               WHERE e.id =  AND e.tenant_id = """,
+               WHERE e.id = $1 AND e.tenant_id = $2""",
             escalation_id, tenant_id
         )
         if not row or not row.get('email_body_preview'):
@@ -386,8 +387,8 @@ async def learn_from_escalation(db, tenant_id: str, escalation_id: int, admin_re
         # Verifier qu on n a pas deja cet exemple
         existing = await db.fetch_one(
             """SELECT id FROM feedback_examples
-               WHERE tenant_id =  AND category = 
-               AND client_message = """,
+               WHERE tenant_id = $1 AND category = $2
+               AND client_message = $3""",
             tenant_id, category, client_msg
         )
         if existing:
@@ -397,7 +398,7 @@ async def learn_from_escalation(db, tenant_id: str, escalation_id: int, admin_re
         await db.execute(
             """INSERT INTO feedback_examples
                (tenant_id, category, client_message, correct_response, source, created_at)
-               VALUES (, , , , , NOW())""",
+               VALUES ($1, $2, $3, $4, $5, NOW())""",
             tenant_id, category, client_msg, response, 'human_escalation'
         )
         logger.info(
@@ -405,5 +406,5 @@ async def learn_from_escalation(db, tenant_id: str, escalation_id: int, admin_re
             extra={'action': 'feedback_saved', 'category': category,
                    'source': 'human_escalation'}
         )
-    except Exception as e:
+    except asyncpg.PostgresError as e:
         logger.debug(f"Erreur learn_from_escalation: {e}")

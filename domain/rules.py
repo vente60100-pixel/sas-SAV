@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v10.5 — Règles métier MODULAIRES
+OKTAGON SAV v11.0 — Règles métier MODULAIRES
 Supporte multiple product_logic types via tenant.custom_rules
 BACKWARD COMPATIBLE avec v10.0 - Code OKTAGON préservé à 100%
 """

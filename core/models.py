@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Modèles centraux
+OKTAGON SAV v11.0 — Modèles centraux
 Ticket : l'objet qui traverse tout le pipeline
 Response : le résultat retourné par chaque handler
 """

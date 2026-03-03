@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v6.3 — Intelligence émotionnelle.
+OKTAGON SAV v11.0 — Intelligence émotionnelle.
 
 Analyse le ton du client et définit comment le cerveau doit adapter sa réponse.
 3 niveaux : détection → classification → instructions d'adaptation.
@@ -328,5 +328,5 @@ async def analyze_emotion_trajectory(db, tenant_id, email_from, current_emotion)
             'urgency_boost': trajectory == 'escalating' and severities[-1] >= 3,
             'delta': round(delta, 2),
         }
-    except Exception as e:
+    except (ValueError, TypeError, KeyError) as e:
         return {'trajectory': 'error', 'instruction': '', 'urgency_boost': False}

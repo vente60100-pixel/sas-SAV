@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v7.0 — Extracteur d'infos client
+OKTAGON SAV v11.0 — Extracteur d'infos client
 Détecte et extrait automatiquement les infos que le client donne dans ses mails :
 - Changement d'adresse
 - Numéro de téléphone

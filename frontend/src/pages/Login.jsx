@@ -1,14 +1,20 @@
 import { useState } from 'react'
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, error: parentError }) {
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const displayError = parentError || error
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!user || !pass) { setError('Remplissez les deux champs'); return }
-    onLogin(user, pass)
+    setLoading(true)
+    setError('')
+    await onLogin(user, pass)
+    setLoading(false)
   }
 
   return (
@@ -39,9 +45,9 @@ export default function Login({ onLogin }) {
             value={pass}
             onChange={e => setPass(e.target.value)}
           />
-          {error && <div style={{ color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-          <button className="btn-primary" type="submit" style={{ marginTop: 8 }}>
-            Connexion
+          {displayError && <div style={{ color: 'var(--red)', fontSize: 13 }}>{displayError}</div>}
+          <button className="btn-primary" type="submit" style={{ marginTop: 8 }} disabled={loading}>
+            {loading ? 'Connexion...' : 'Connexion'}
           </button>
         </form>
       </div>

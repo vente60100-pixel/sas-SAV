@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Interface abstraite Channel (communication)
+OKTAGON SAV v11.0 — Interface abstraite Channel (communication)
 Email aujourd'hui, WhatsApp/Instagram demain.
 """
 from abc import ABC, abstractmethod

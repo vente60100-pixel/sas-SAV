@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v6.0 — Retry Logic
+OKTAGON SAV v11.0 — Retry Logic
 Retry automatique intelligent avec exponential backoff.
 
 Principe : Si un appel API échoue, on réessaye avec des délais croissants.

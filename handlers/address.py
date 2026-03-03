@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Handler Modifier Adresse (CAS 1-B)
+OKTAGON SAV v11.0 — Handler Modifier Adresse (CAS 1-B)
 Vérifie Shopify, propose modification, attend confirmation.
 """
 import json

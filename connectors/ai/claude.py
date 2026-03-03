@@ -1,8 +1,9 @@
 """
-OKTAGON SAV v8.0 — Connecteur Claude (Anthropic)
+OKTAGON SAV v11.0 — Connecteur Claude (Anthropic)
 CERVEAU INTELLIGENT avec Tool Use natif.
 L'IA peut chercher elle-même sur Shopify (par nom, confirmation, montant, tracking).
 """
+import asyncio
 import re
 import json
 import anthropic
@@ -140,13 +141,16 @@ async def execute_brain_tool(tool_name: str, tool_input: dict, shopify) -> str:
         else:
             return json.dumps({"error": f"Outil inconnu: {tool_name}"})
 
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Erreur exécution tool {tool_name}: {e}")
         return json.dumps({"error": str(e)})
 
 
 class ClaudeConnector(AIConnector):
-    """Connecteur Anthropic Claude — v8.0 avec tool use."""
+    """Connecteur Anthropic Claude — v11.0 avec tool use + timeout."""
+
+    # Timeout max par appel API Claude (secondes)
+    API_TIMEOUT = 45
 
     def __init__(self, api_key: str, model: str = 'claude-sonnet-4-5-20250929',
                  max_tokens: int = 8000, temperature: float = 0.7):
@@ -168,12 +172,15 @@ class ClaudeConnector(AIConnector):
             max_tool_calls = 5  # Sécurité anti-boucle
 
             while True:
-                response = await client.messages.create(
-                    model=self.model,
-                    max_tokens=self.max_tokens,
-                    temperature=0.4,
-                    tools=BRAIN_TOOLS,
-                    messages=messages
+                response = await asyncio.wait_for(
+                    client.messages.create(
+                        model=self.model,
+                        max_tokens=self.max_tokens,
+                        temperature=0.4,
+                        tools=BRAIN_TOOLS,
+                        messages=messages
+                    ),
+                    timeout=self.API_TIMEOUT
                 )
 
                 # Vérifier s'il y a des tool_use dans la réponse
@@ -222,20 +229,31 @@ class ClaudeConnector(AIConnector):
                         extra={"action": "brain_max_tools"}
                     )
                     # Forcer une réponse finale sans tools
-                    final_response = await client.messages.create(
-                        model=self.model,
-                        max_tokens=self.max_tokens,
-                        temperature=0.4,
-                        messages=messages
+                    final_response = await asyncio.wait_for(
+                        client.messages.create(
+                            model=self.model,
+                            max_tokens=self.max_tokens,
+                            temperature=0.4,
+                            messages=messages
+                        ),
+                        timeout=self.API_TIMEOUT
                     )
                     text_blocks = [b for b in final_response.content if b.type == "text"]
                     if text_blocks:
                         return self._parse_json_response(text_blocks[0].text)
                     return self._empty_response()
 
-        except Exception as e:
-            logger.error(f"Erreur cerveau intelligent: {e}",
-                         extra={"action": "brain_error", "error": str(e)})
+        except asyncio.TimeoutError:
+            logger.error("Timeout cerveau intelligent (API Claude ne répond pas)",
+                         extra={"action": "brain_timeout"})
+            return self._empty_response()
+        except anthropic.APIError as e:
+            logger.error(f"Erreur API Claude: {e}",
+                         extra={"action": "brain_api_error", "error": str(e)})
+            return self._empty_response()
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
+            logger.error(f"Erreur auth Claude: {e}",
+                         extra={"action": "brain_auth_error", "error": str(e)})
             return self._empty_response()
 
     async def unified_process(self, prompt: str) -> dict:
@@ -245,16 +263,25 @@ class ClaudeConnector(AIConnector):
         """
         try:
             client = anthropic.AsyncAnthropic(api_key=self.api_key)
-            response = await client.messages.create(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                temperature=0.4,
-                messages=[{"role": "user", "content": prompt}]
+            response = await asyncio.wait_for(
+                client.messages.create(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    temperature=0.4,
+                    messages=[{"role": "user", "content": prompt}]
+                ),
+                timeout=self.API_TIMEOUT
             )
-            text = response.content[0].text.strip()
+            if not response.content:
+                logger.warning("Claude a retourné une réponse vide")
+                return self._empty_response()
+            text = response.content[0].text.strip() if hasattr(response.content[0], 'text') else ''
             return self._parse_json_response(text)
-        except Exception as e:
-            logger.error(f"Erreur unified_process: {e}")
+        except asyncio.TimeoutError:
+            logger.error("Timeout unified_process", extra={"action": "brain_timeout"})
+            return self._empty_response()
+        except anthropic.APIError as e:
+            logger.error(f"Erreur API unified_process: {e}")
             return self._empty_response()
 
     def _parse_json_response(self, text: str) -> dict:
@@ -319,7 +346,8 @@ class ClaudeConnector(AIConnector):
                 return json.loads(text)
             except json.JSONDecodeError:
                 return {"response": text, "escalade": False, "confidence": 0.85}
-        except Exception:
+        except (anthropic.APIError, asyncio.TimeoutError) as e:
+            logger.error(f"Erreur generate: {e}")
             return {"response": "", "escalade": True, "confidence": 0.0}
 
     async def classify(self, subject: str, body: str, tenant=None) -> dict:
@@ -348,5 +376,6 @@ class ClaudeConnector(AIConnector):
                 "language": result.get("language", "fr"),
                 "summary": result.get("summary", "")
             }
-        except Exception:
+        except (anthropic.APIError, asyncio.TimeoutError, json.JSONDecodeError) as e:
+            logger.error(f"Erreur classify: {e}")
             return {"category": "AUTRE", "confidence": 0.0, "order_number": None, "language": "fr", "summary": ""}

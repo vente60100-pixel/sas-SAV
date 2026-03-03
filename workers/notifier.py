@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Worker Notification Telegram
+OKTAGON SAV v11.0 — Worker Notification Telegram
 Unifie telegram_admin + telegram_usine.
 """
 import httpx
@@ -29,6 +29,6 @@ class TelegramNotifier:
                     }
                 )
                 return resp.status_code == 200
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error(f"Telegram erreur: {e}", extra={"action": "telegram_error"})
             return False

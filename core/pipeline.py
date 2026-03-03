@@ -1,10 +1,12 @@
 """
-OKTAGON SAV v5.0 — Pipeline unifié
+OKTAGON SAV v11.0 — Pipeline unifié
 1 seul chemin : filter → identify → extract → enrich → cerveau → post-process → respond
 Plus de menu, plus de double IA, plus de handlers par catégorie.
 """
+import asyncio
 import json
 import time
+import asyncpg
 from core.memory_summarizer import build_smart_history
 from core.emotional_intelligence import analyze_emotion, get_emotion_label, analyze_emotion_trajectory
 from core.client_memory import build_client_context
@@ -96,20 +98,19 @@ class Pipeline:
 
         # 🚨 BLOCAGE PRÉVENTIF DES DUPLICATES (AVANT APPEL API)
         if ticket.subject and ticket.subject.startswith("Re: Re:"):
-            logger.warning(f"DUPLICATE PRÉVENTIF: Re: Re: bloqué pour {ticket.email_from} - Aucun appel API", 
-                          extra={"action": "duplicate_prevented"})
-            return  # STOP ICI - Aucun traitement, aucun appel API 
-                AND created_at > NOW() - INTERVAL '24 hours'
-                AND tenant_id = """,
-                ticket.email_from, self.tenant.id
+            already_sent = await self.repos.count_recent_responses(
+                self.tenant.id, ticket.email_from, hours=24
             )
-            if already_sent and already_sent > 0:
-                logger.warning(f"DUPLICATE PRÉVENTIF: Re: Re: détecté pour {ticket.email_from} ({already_sent} réponses déjà envoyées) - Aucun appel API", 
-                              extra={"action": "duplicate_prevented", "already_sent": already_sent})
-                return  # STOP ICI - Aucun traitement, aucun appel API
-            else:
-                logger.info(f"Re: Re: détecté mais AUCUNE réponse envoyée à {ticket.email_from} - Traitement normal",
-                           extra={"action": "first_response_needed"})
+            if already_sent > 0:
+                logger.warning(
+                    f"DUPLICATE BLOQUÉ: {ticket.email_from} ({already_sent} réponses en 24h)",
+                    extra={"action": "duplicate_prevented", "already_sent": already_sent}
+                )
+                return
+            logger.info(
+                f"Re: Re: détecté mais aucune réponse envoyée à {ticket.email_from} — traitement normal",
+                extra={"action": "first_response_needed"}
+            )
 
 
 
@@ -414,7 +415,7 @@ class Pipeline:
                         extra={"action": "order_found_by_confirmation"}
                     )
                     return
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 logger.debug(f"Recherche confirmation {conf_num} erreur: {e}")
 
         # 3. Lookup Shopify par email
@@ -440,7 +441,7 @@ class Pipeline:
                     ticket.detection_method = 'none'
                     logger.info(f"Aucune commande trouvée pour {ticket.email_from} (email+nom+préfixe)",
                                 extra={"action": "no_order_found"})
-        except Exception as e:
+        except (OSError, ValueError, KeyError) as e:
             logger.error(f"Shopify lookup erreur: {e}", extra={"action": "shopify_lookup_error"})
             ticket.detection_method = 'error'
 
@@ -500,7 +501,7 @@ class Pipeline:
                             extra={"action": "multiple_orders_found_by_name"}
                         )
                     return True
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 logger.debug(f"Recherche par nom ({name}) erreur: {e}")
                 continue
 
@@ -528,7 +529,7 @@ class Pipeline:
                             ticket.customer_name = shopify_name.split()[0]
                     else:
                         ticket.customer_name = ticket.signed_name
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 logger.error(f"Shopify get_order erreur: {e}", extra={"action": "shopify_error"})
 
         # Multi-commandes : utiliser all_orders déjà chargé par _extract_order
@@ -581,7 +582,7 @@ class Pipeline:
                 self.db, self.ai, self.tenant.id, ticket.email_from
             )
             ticket.conversation_history = smart_history if smart_history else ""
-        except Exception as e:
+        except (OSError, ValueError, TypeError, asyncpg.PostgresError) as e:
             logger.warning(f"Erreur historique intelligent: {e}")
             # Fallback : ancien système brut
             history_rows = await self.repos.get_conversation_history(
@@ -606,7 +607,7 @@ class Pipeline:
                 self.db, self.tenant.id, ticket.email_from,
                 ticket.body, ticket.subject
             )
-        except Exception as e:
+        except (ValueError, TypeError, asyncpg.PostgresError) as e:
             logger.debug(f"Erreur scoring retour: {e}")
 
         # Intelligence émotionnelle v6.3 — analyser le ton du client
@@ -631,7 +632,7 @@ class Pipeline:
                 ticket.urgency_level = 'HIGH'
                 logger.info(f"Urgence montee a HIGH (trajectoire emotionnelle montante)",
                             extra={'action': 'emotion_trajectory', 'trajectory': trajectory.get('trajectory')})
-        except Exception:
+        except (ValueError, TypeError):
             ticket.emotion_trajectory = None
 
         # Profil client ENRICHI v6.3 (tags, fidélité, état conversation, instructions)
@@ -649,7 +650,7 @@ class Pipeline:
                 parts = ticket.sender_name.strip().split()
                 if parts and len(parts[0]) >= 2:
                     ticket.customer_name = parts[0].capitalize()
-        except Exception as e:
+        except (ValueError, TypeError, KeyError, asyncpg.PostgresError) as e:
             logger.warning(f"Erreur profil enrichi: {e}")
             ticket.client_profile = {}
 
@@ -666,7 +667,7 @@ class Pipeline:
                                 f"(score={satisfaction['score']:.1f})",
                                 extra={'action': 'satisfaction_detected',
                                        'sentiment': satisfaction['sentiment']})
-            except Exception:
+            except (ValueError, TypeError):
                 ticket.satisfaction = {'score': None, 'sentiment': 'unknown', 'source': 'error'}
         else:
             ticket.satisfaction = {'score': None, 'sentiment': 'unknown', 'source': 'first_contact'}
@@ -678,7 +679,7 @@ class Pipeline:
                 await update_client_memory(
                     self.db, self.tenant.id, ticket.email_from, ticket.extracted_info
                 )
-        except Exception as e:
+        except (ValueError, TypeError, KeyError) as e:
             logger.debug(f"Erreur extraction infos: {e}")
             ticket.extracted_info = {'extracted_infos': []}
 
@@ -802,7 +803,7 @@ class Pipeline:
                         category='BOUCLE', confidence=1.0,
                         escalation_reason=f"Boucle détectée: {similarity:.0%} similarité sur 2 réponses"
                     )
-        except Exception as e:
+        except (ValueError, TypeError, asyncpg.PostgresError) as e:
             logger.debug(f"Erreur détection boucle: {e}")
 
         # 🧠 INTELLIGENCE COMPLÈTE : Lire TOUTE la conversation
@@ -872,8 +873,8 @@ class Pipeline:
             if guess_cat:
                 examples = await get_feedback_examples(self.db, self.tenant.id, guess_cat, limit=3)
                 ticket_data['learned_examples'] = format_examples_for_prompt(examples)
-        except Exception:
-            pass
+        except (ValueError, TypeError, asyncpg.PostgresError) as e:
+            logger.debug(f"Erreur chargement exemples appris: {e}")
 
         # v10.0 — Charger les erreurs passees pour ce client
         try:
@@ -890,8 +891,8 @@ class Pipeline:
                         error_lines.append(f"- Reponse mal scoree: {quality[:80]}")
                 if error_lines:
                     ticket_data['past_errors'] = error_lines
-        except Exception:
-            pass
+        except (ValueError, TypeError, asyncpg.PostgresError) as e:
+            logger.debug(f"Erreur chargement erreurs passées: {e}")
 
         # v10.0 — Verifier repetition de contenu
         self._check_content_repetition(ticket, ticket_data)
@@ -1112,7 +1113,7 @@ class Pipeline:
                     ticket.db_id, ticket.subject,
                     response.category or ticket.category
                 )
-        except Exception as e:
+        except (asyncpg.PostgresError, ValueError) as e:
             logger.debug(f"Erreur ticket tracker: {e}")
 
         # Escalade
@@ -1153,8 +1154,8 @@ class Pipeline:
                 # v7.0 — Marquer ticket comme escaladé
                 try:
                     await escalate_ticket(self.db, self.tenant.id, ticket.email_from)
-                except Exception:
-                    pass
+                except (asyncpg.PostgresError, ValueError) as e:
+                    logger.debug(f"Erreur escalade ticket: {e}")
 
                 if self.notifier and not response.telegram_message:
                     await self.notifier(
@@ -1205,8 +1206,8 @@ class Pipeline:
                     await mark_ticket_responded(
                         self.db, self.tenant.id, ticket.email_from, ticket.db_id
                     )
-                except Exception:
-                    pass
+                except (asyncpg.PostgresError, ValueError) as e:
+                    logger.debug(f"Erreur marquage ticket répondu: {e}")
 
                 # v7.1 — Score qualité données (immédiat)
                 try:
@@ -1222,7 +1223,7 @@ class Pipeline:
                             f"erreurs: {data_check['errors']}",
                             extra={'action': 'data_score', 'score': data_check['data_score']}
                         )
-                except Exception as e:
+                except (ValueError, TypeError, asyncpg.PostgresError) as e:
                     logger.debug(f"Erreur scoring: {e}")
 
             # Mettre à jour profil client + émotion (v7.2 — enrichi)
@@ -1246,8 +1247,8 @@ class Pipeline:
                         emotion_detected=emotion.get('primary_emotion'),
                         emotion_score=emotion.get('emotion_score', 0)
                     )
-            except Exception:
-                pass
+            except (ValueError, TypeError, asyncpg.PostgresError) as e:
+                logger.debug(f"Erreur mise à jour profil client: {e}")
 
             # Apprentissage — sauvegarder satisfaction + ajuster confiance
             try:
@@ -1278,7 +1279,7 @@ class Pipeline:
                             ticket.body[:500], response.text[:1000],
                             source='auto_positive'
                         )
-            except Exception as e:
+            except (ValueError, TypeError, asyncpg.PostgresError) as e:
                 logger.debug(f"Erreur apprentissage: {e}")
 
         # Notification Telegram custom
@@ -1339,8 +1340,8 @@ class Pipeline:
                     "Propose une ACTION NOUVELLE : verification aupres du transporteur, "
                     "escalade interne, ou explication du statut actuel du colis."
                 )
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as e:
+            logger.debug(f"Erreur vérification répétition contenu: {e}")
 
     def _validate_and_fix_response(self, ticket: Ticket, text: str) -> str:
         """v9.0 — Validation unifiée : injection données réelles + contrôle qualité.

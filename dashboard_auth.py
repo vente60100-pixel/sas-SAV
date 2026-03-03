@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v10.0 — Dashboard Authentication
+OKTAGON SAV v11.0 — Dashboard Authentication
 HTTP Basic Auth pour sécuriser les endpoints API
 """
 import secrets

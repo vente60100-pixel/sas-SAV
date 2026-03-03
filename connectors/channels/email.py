@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v8.1 — Connecteur Email (IMAP/SMTP)
+OKTAGON SAV v11.0 — Connecteur Email (IMAP/SMTP)
 Vision complète : lit LUS + NON LUS, HTML, nom expéditeur, CC, pièces jointes, SPAM.
 """
 import imaplib
@@ -52,7 +52,7 @@ class EmailConnector(ChannelConnector):
                     status, _ = mail.select(folder)
                     if status != 'OK':
                         continue
-                except Exception:
+                except (UnicodeDecodeError, ValueError, KeyError):
                     continue
 
                 # Chercher TOUS les emails des dernières 24h (lus ET non lus)
@@ -131,11 +131,11 @@ class EmailConnector(ChannelConnector):
                                 # Garder les 1000 plus récents (dict garde l'ordre d'insertion)
                                 keys = list(self._seen_ids.keys())
                                 self._seen_ids = {k: True for k in keys[-1000:]}
-                    except Exception:
+                    except (UnicodeDecodeError, ValueError, KeyError):
                         continue
 
             mail.logout()
-        except Exception as e:
+        except (OSError, imaplib.IMAP4.error) as e:
             logger.error(f'Erreur IMAP fetch: {e}', extra={'action': 'imap_error'})
         return messages
 
@@ -147,7 +147,7 @@ class EmailConnector(ChannelConnector):
                 part.decode(enc or 'utf-8') if isinstance(part, bytes) else part
                 for part, enc in parts
             )
-        except Exception:
+        except (UnicodeDecodeError, ValueError, KeyError):
             return header
 
     def _get_body(self, msg) -> str:
@@ -162,12 +162,12 @@ class EmailConnector(ChannelConnector):
                 if ctype == 'text/plain' and text_body is None:
                     try:
                         text_body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                    except Exception:
+                    except (UnicodeDecodeError, ValueError, KeyError):
                         pass
                 elif ctype == 'text/html' and html_body is None:
                     try:
                         html_body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                    except Exception:
+                    except (UnicodeDecodeError, ValueError, KeyError):
                         pass
         else:
             ctype = msg.get_content_type()
@@ -179,7 +179,7 @@ class EmailConnector(ChannelConnector):
                     html_body = payload
                 else:
                     text_body = payload
-            except Exception:
+            except (UnicodeDecodeError, ValueError, KeyError):
                 pass
 
         if text_body and text_body.strip():
@@ -233,6 +233,6 @@ class EmailConnector(ChannelConnector):
                 server.login(self.address, self.password)
                 server.sendmail(self.address, to, msg.as_string())
             return True
-        except Exception as e:
+        except (OSError, smtplib.SMTPException) as e:
             logger.error(f'Erreur SMTP send to {to}: {e}', extra={'action': 'smtp_error'})
             return False

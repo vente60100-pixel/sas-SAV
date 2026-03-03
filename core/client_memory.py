@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v6.3 — Mémoire client intelligente.
+OKTAGON SAV v11.0 — Mémoire client intelligente.
 
 Profil client enrichi avec :
 - Score de fidélité (basé sur nb commandes, ancienneté, satisfaction)
@@ -282,5 +282,5 @@ async def update_client_emotion(db, tenant_id: str, email: str,
                WHERE tenant_id = $2 AND email = $3""",
             f"{emotion}:{score:.2f}", tenant_id, email
         )
-    except Exception:
+    except (ValueError, TypeError, KeyError):
         pass  # Pas grave si ça échoue

@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v6.1 — Système d'apprentissage automatique.
+OKTAGON SAV v11.0 — Système d'apprentissage automatique.
 
 3 mécanismes :
 1. Détection satisfaction : analyse la réponse du client pour noter la qualité
@@ -289,8 +289,8 @@ async def check_no_reply_satisfaction(db, tenant_id: str):
                         row['response_text'][:1000]
                     )
                     learned += 1
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as e:
+            logger.debug(f"Erreur auto-feed silence 48h: {e}")
 
     if count > 0:
         logger.info(f"Auto-satisfaction: {count} emails sans réponse -> présumés satisfaits"

@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v2.4 - Sécurité et validation
+OKTAGON SAV v11.0 — Sécurité et validation
 Anti-spam, détection langue, hash emails, validation
 """
 import hashlib
@@ -154,12 +154,13 @@ def detect_language(subject: str, body: str) -> str:
 
     # Retourner langue avec le plus de matches
     max_count = max(fr_count, en_count, es_count)
-    if fr_count == max_count:
+    if max_count == 0:
         return 'fr'
-    elif en_count == max_count:
+    if es_count == max_count and es_count > fr_count and es_count > en_count:
+        return 'es'
+    if en_count == max_count and en_count > fr_count:
         return 'en'
-    else:
-        return 'fr'
+    return 'fr'
 
 
 def extract_order_number(text: str) -> Optional[str]:

@@ -1,11 +1,7 @@
 """
-OKTAGON SAV v10.0 — Point d'entrée principal
+OKTAGON SAV v11.0 — Point d'entrée principal
 Monte le pipeline, connecte tout, lance le polling.
 """
-# v10.0 — Sentry monitoring
-from sentry_init import init_sentry
-init_sentry()
-
 import asyncio
 import signal
 import sys
@@ -14,11 +10,15 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+# Sentry APRÈS load_dotenv pour avoir les env vars
+from sentry_init import init_sentry
+init_sentry()
+
 from config import config
 from logger import logger
 from storage.database import Database
 from storage.repos import Repos
-from storage.schema import run_migration, run_migration_v41, run_migration_v50
+from storage.schema import run_migration, run_migration_v41, run_migration_v50, run_migration_v105
 from connectors.ecommerce.shopify import ShopifyConnector
 from connectors.channels.email import EmailConnector
 from connectors.ai.claude import ClaudeConnector
@@ -30,13 +30,11 @@ from workers.recovery import recover_pending
 from workers.notifier import TelegramNotifier
 from security import security_check
 from dashboard import app as dashboard_app, init_dashboard
-from security import security_check
-from dashboard import app as dashboard_app, init_dashboard
 
 
 async def main():
     """Initialise tout et lance le service."""
-    logger.info('═══ OKTAGON SAV v5.0 — DÉMARRAGE ═══', extra={'action': 'startup'})
+    logger.info('═══ OKTAGON SAV v11.0 — DÉMARRAGE ═══', extra={'action': 'startup'})
 
     # ── 1. Base de données ──
     db = Database()
@@ -54,6 +52,7 @@ async def main():
     await run_migration(db)
     await run_migration_v41(db)
     await run_migration_v50(db)
+    await run_migration_v105(db)
 
     # ── 2. Repos ──
     repos = Repos(db)
@@ -161,17 +160,17 @@ async def main():
         logger.info(f'Pipeline créé pour tenant: {tenant.name}',
                     extra={'action': 'pipeline_created', 'tenant': tenant.id})
 
-
-        # Initialiser le dashboard avec les connecteurs
+    # ── 5. Dashboard (initialisé pour chaque tenant) ──
+    for pipeline in pipelines:
         init_dashboard(
             db=db,
             repos=repos,
-            shopify_connector=ecommerce,
-            email_connector=channel,
-            claude_connector=ai,
-            config=config
+            shopify_connector=pipeline.ecommerce,
+            email_connector=pipeline.channel,
+            claude_connector=pipeline.ai,
+            config=config,
+            tenant_id=pipeline.tenant.id
         )
-    # ── 5. Dashboard (FastAPI) ──
     app = dashboard_app
 
     # ── 6. Lancer le polling pour chaque pipeline ──
@@ -199,8 +198,9 @@ async def main():
         # v7.0 — Worker de suivi (tickets ouverts, fermeture auto, rapport quotidien)
         followup_task = asyncio.create_task(
             followup_loop(
-                pipeline.db, pipeline.tenant.id,
-                pipeline.notifier, shutdown_event
+                db, pipeline.tenant.id,
+                pipeline.notifier, shutdown_event,
+                repos=repos
             )
         )
         tasks.append(followup_task)

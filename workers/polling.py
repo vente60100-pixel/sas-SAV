@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Worker Polling IMAP
+OKTAGON SAV v11.0 — Worker Polling IMAP
 Boucle de polling qui fetch les emails et les passe au pipeline.
 """
 import asyncio

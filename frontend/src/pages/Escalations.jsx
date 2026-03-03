@@ -28,8 +28,9 @@ export default function Escalations() {
     if (!replyText.trim()) return
     setSending(true)
     try {
-      await sendEmail(esc.email, `Re: ${esc.subject || 'OKTAGON SAV'}`, replyText)
+      // Résoudre AVANT d'envoyer pour éviter les doubles envois
       await resolveEscalation(esc.id, 'replied', replyText)
+      await sendEmail(esc.email, `Re: ${esc.subject || 'OKTAGON SAV'}`, replyText)
       setReplyId(null)
       setReplyText('')
       load()

@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Templates email HTML
+OKTAGON SAV v11.0 — Templates email HTML
 Dynamiques par tenant (brand_name, brand_color, brand_tagline).
 """
 import re

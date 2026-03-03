@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v10.0 — Sentry Integration
+OKTAGON SAV v11.0 — Sentry Integration
 Monitoring d'erreurs production avec Sentry.io
 """
 import os

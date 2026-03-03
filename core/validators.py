@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v6.0 — Validators
+OKTAGON SAV v11.0 — Validators
 Validation stricte des réponses IA pour garantir la cohérence.
 
 Principe : L'IA peut générer n'importe quoi, on vérifie TOUT.
@@ -33,14 +33,12 @@ class AIResponseSchema(BaseModel):
     
     @validator('category')
     def validate_category(cls, v):
-        """Valide que la catégorie est reconnue."""
-        valid_categories = {
-            'LIVRAISON', 'COMMANDE', 'RETOUR', 'PERSONNALISATION',
-            'PRODUIT', 'PAIEMENT', 'AUTRE', 'PRE_ACHAT'
-        }
+        """Valide que la catégorie est reconnue (source unique : core.constants)."""
+        from core.constants import CATEGORIES
+        valid_categories = set(CATEGORIES)
         v_upper = v.upper()
         if v_upper not in valid_categories:
-            logger.warning(f"⚠️ Catégorie invalide : {v} → AUTRE")
+            logger.warning(f"Categorie invalide : {v} -> AUTRE")
             return "AUTRE"
         return v_upper
     

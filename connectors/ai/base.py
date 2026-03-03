@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Interface abstraite IA
+OKTAGON SAV v11.0 — Interface abstraite IA
 Claude aujourd'hui, OpenAI/Mistral demain.
 """
 from abc import ABC, abstractmethod

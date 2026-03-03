@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Handler Annulation (CAS 1-C)
+OKTAGON SAV v11.0 — Handler Annulation (CAS 1-C)
 Analyse articles, vérifie remboursabilité, gère retour.
 """
 import json

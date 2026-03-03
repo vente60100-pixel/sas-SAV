@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Connecteur Shopify
+OKTAGON SAV v11.0 — Connecteur Shopify
 Implémente EcommerceConnector pour l'API Shopify.
 Authentification OAuth2 (client_credentials → access_token).
 """
@@ -53,7 +53,7 @@ class ShopifyConnector(EcommerceConnector):
                     logger.error(f"Shopify token vide — réponse: {resp.text[:200]}",
                                  extra={"action": "shopify_token_error"})
                 return token
-        except Exception as e:
+        except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError) as e:
             logger.error(f"Shopify token erreur: {e}",
                          extra={"action": "shopify_token_error"})
             return ""
@@ -116,7 +116,7 @@ class ShopifyConnector(EcommerceConnector):
                     return None
 
                 return self._format_order(orders[0])
-        except Exception as e:
+        except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError) as e:
             logger.error(f"Shopify get_order erreur: {e}",
                          extra={"action": "shopify_error"})
             return None
@@ -226,7 +226,7 @@ class ShopifyConnector(EcommerceConnector):
                     return []
                 orders = resp.json().get("orders", [])
                 return [self._format_order(o) for o in orders]
-        except Exception as e:
+        except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError) as e:
             logger.error(f"Shopify get_orders_by_email erreur: {e}",
                          extra={"action": "shopify_error"})
             return []
@@ -256,7 +256,7 @@ class ShopifyConnector(EcommerceConnector):
                     "orders_count": c.get("orders_count", 0),
                     "total_spent": c.get("total_spent", "0")
                 }
-        except Exception as e:
+        except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError) as e:
             logger.error(f"Shopify get_customer erreur: {e}",
                          extra={"action": "shopify_error"})
             return None
@@ -300,7 +300,7 @@ class ShopifyConnector(EcommerceConnector):
                                 for order in resp2.json().get("orders", []):
                                     results.append(self._format_order(order))
                 return results
-        except Exception as e:
+        except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError) as e:
             logger.error(f"Shopify search_orders_by_name erreur: {e}",
                          extra={"action": "shopify_error"})
             return []
@@ -350,7 +350,7 @@ class ShopifyConnector(EcommerceConnector):
                         break  # Dernière page
 
                 return None
-        except Exception as e:
+        except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError) as e:
             logger.error(f"Shopify search_by_confirmation erreur: {e}",
                          extra={"action": "shopify_error"})
             return None
@@ -418,7 +418,7 @@ class ShopifyConnector(EcommerceConnector):
                         break
 
                 return results
-        except Exception as e:
+        except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError) as e:
             logger.error(f"Shopify search_by_amount erreur: {e}",
                          extra={"action": "shopify_error"})
             return []

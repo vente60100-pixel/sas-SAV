@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Tenant Registry
+OKTAGON SAV v11.0 — Tenant Registry
 Charge les tenants depuis la DB, cache en mémoire.
 """
 import json

@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
-import { isLoggedIn, login as doLogin } from './api/client'
+import { isLoggedIn, login as doLogin, logout, getStats } from './api/client'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Clients from './pages/Clients'
@@ -13,16 +13,25 @@ import Login from './pages/Login'
 
 export default function App() {
   const [authed, setAuthed] = useState(isLoggedIn())
+  const [loginError, setLoginError] = useState('')
 
-  const handleLogin = (user, pass) => {
+  const handleLogin = async (user, pass) => {
     doLogin(user, pass)
-    setAuthed(true)
+    try {
+      await getStats('today')
+      setAuthed(true)
+      setLoginError('')
+    } catch {
+      logout()
+      setAuthed(false)
+      setLoginError('Identifiants incorrects')
+    }
   }
 
-  if (!authed) return <Login onLogin={handleLogin} />
+  if (!authed) return <Login onLogin={handleLogin} error={loginError} />
 
   return (
-    <Layout onLogout={() => { localStorage.clear(); setAuthed(false) }}>
+    <Layout onLogout={() => { logout(); setAuthed(false) }}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/clients" element={<Clients />} />

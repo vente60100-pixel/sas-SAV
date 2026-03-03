@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v7.0 — Ticket Tracker
+OKTAGON SAV v11.0 — Ticket Tracker
 Système de suivi des conversations : chaque client a un ticket OUVERT ou FERMÉ.
 
 Un ticket est OUVERT quand :

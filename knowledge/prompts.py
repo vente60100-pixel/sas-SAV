@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Prompts IA par tenant
+OKTAGON SAV v11.0 — Prompts IA par tenant
 Chaque tenant a ses propres prompts stockés dans TenantConfig.prompts
 """
 

@@ -8,33 +8,57 @@ import os
 import time
 import secrets
 from typing import Optional
+import asyncpg
+import anthropic
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from logger import logger
 
-app = FastAPI(title="OKTAGON SAV Cockpit", docs_url=None, redoc_url=None)
+app = FastAPI(title="OKTAGON SAV Cockpit", docs_url="/api/docs", redoc_url=None)
+
+
+@app.middleware("http")
+async def add_timing_header(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    duration = time.time() - start
+    response.headers["X-Process-Time"] = f"{duration:.3f}"
+    if duration > 2.0:
+        logger.warning(f"Endpoint lent ({duration:.2f}s): {request.url.path}",
+                       extra={"action": "slow_endpoint"})
+    return response
+
+
 security = HTTPBasic()
 
 # Références injectées par main.py
 _db = None
 _repos = None
-_shopify = None
-_email_connector = None
-_claude = None
 _config = None
-_tenant_id = 'oktagon'
+_default_tenant_id = 'oktagon'
+_tenant_connectors = {}  # {tenant_id: {shopify, email, claude}}
+
 
 def init_dashboard(db, repos, shopify_connector=None, email_connector=None,
-                   claude_connector=None, config=None):
-    global _db, _repos, _shopify, _email_connector, _claude, _config
+                   claude_connector=None, config=None, tenant_id='oktagon'):
+    global _db, _repos, _config, _default_tenant_id
     _db = db
     _repos = repos
-    _shopify = shopify_connector
-    _email_connector = email_connector
-    _claude = claude_connector
     _config = config
+    _default_tenant_id = tenant_id
+    _tenant_connectors[tenant_id] = {
+        'shopify': shopify_connector,
+        'email': email_connector,
+        'claude': claude_connector,
+    }
+
+
+def _get_connectors(tenant_id=None):
+    """Récupère les connecteurs pour un tenant."""
+    tid = tenant_id or _default_tenant_id
+    return _tenant_connectors.get(tid, _tenant_connectors.get(_default_tenant_id, {}))
 
 
 def _verify(creds: HTTPBasicCredentials = Depends(security)):
@@ -52,8 +76,8 @@ def _verify(creds: HTTPBasicCredentials = Depends(security)):
 
 @app.get("/api/stats")
 async def api_stats(user: str = Depends(_verify), period: str = 'today'):
-    stats = await _repos.get_dashboard_stats(_tenant_id, period)
-    categories = await _repos.get_stats_by_category(_tenant_id, period)
+    stats = await _repos.get_dashboard_stats(_default_tenant_id, period)
+    categories = await _repos.get_stats_by_category(_default_tenant_id, period)
     # Daily stats pour graphique
     daily = []
     try:
@@ -62,11 +86,11 @@ async def api_stats(user: str = Depends(_verify), period: str = 'today'):
                FROM processed_emails WHERE tenant_id = $1
                AND created_at > NOW() - INTERVAL '30 days'
                GROUP BY DATE(created_at) ORDER BY d""",
-            _tenant_id
+            _default_tenant_id
         )
         daily = [{'date': r['d'].strftime('%d/%m'), 'count': r['c']} for r in rows]
-    except Exception:
-        pass
+    except asyncpg.PostgresError as e:
+        logger.error(f"Erreur stats daily: {e}", extra={"action": "stats_error"})
     stats['categories'] = categories
     stats['daily'] = daily
     return JSONResponse(stats)
@@ -86,15 +110,14 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
     - Évolution sur période
     """
     try:
-        # Calculer l'intervalle
-        if period == 'today':
-            interval = "24 HOURS"
-        elif period == '7d':
-            interval = "7 DAYS"
-        elif period == '30d':
-            interval = "30 DAYS"
-        else:
-            interval = "7 DAYS"
+        # Calculer l'intervalle (whitelist stricte pour éviter injection SQL)
+        VALID_INTERVALS = {
+            'today': '24 HOURS',
+            '7d': '7 DAYS',
+            '30d': '30 DAYS',
+            '90d': '90 DAYS',
+        }
+        interval = VALID_INTERVALS.get(period, '7 DAYS')
 
         # 1. TAUX DE CATÉGORISATION (% non-AUTRE)
         categorization = await _db.fetch_one(f"""
@@ -107,7 +130,7 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
             WHERE tenant_id = $1
             AND created_at > NOW() - INTERVAL '{interval}'
             AND category IS NOT NULL
-        """, _tenant_id)
+        """, _default_tenant_id)
 
         # 2. CONFIANCE MOYENNE PAR CATÉGORIE
         confidence_by_cat = await _db.fetch_all(f"""
@@ -124,7 +147,7 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
             AND confidence_score IS NOT NULL
             GROUP BY category
             ORDER BY count DESC
-        """, _tenant_id)
+        """, _default_tenant_id)
 
         # 3. TAUX D'ESCALATION
         escalation_rate = await _db.fetch_one(f"""
@@ -135,7 +158,7 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
             FROM processed_emails
             WHERE tenant_id = $1
             AND created_at > NOW() - INTERVAL '{interval}'
-        """, _tenant_id)
+        """, _default_tenant_id)
 
         # 4. RAISONS D'ESCALATION (top 5)
         escalation_reasons = await _db.fetch_all(f"""
@@ -149,7 +172,7 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
             GROUP BY reason
             ORDER BY count DESC
             LIMIT 5
-        """, _tenant_id)
+        """, _default_tenant_id)
 
         # 5. ÉVOLUTION JOURNALIÈRE (7 derniers jours)
         daily_intelligence = await _db.fetch_all("""
@@ -165,7 +188,7 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
             AND category IS NOT NULL
             GROUP BY DATE(created_at)
             ORDER BY date
-        """, _tenant_id)
+        """, _default_tenant_id)
 
         # 6. PERFORMANCE TEMPS RÉEL (dernières 24h)
         realtime = await _db.fetch_one("""
@@ -177,7 +200,7 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
             FROM processed_emails
             WHERE tenant_id = $1
             AND created_at > NOW() - INTERVAL '24 HOURS'
-        """, _tenant_id)
+        """, _default_tenant_id)
 
         # Formatter la réponse
         result = {
@@ -227,7 +250,7 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
 
         return JSONResponse(result)
 
-    except Exception as e:
+    except (asyncpg.PostgresError, KeyError, TypeError) as e:
         logger.error(f"Erreur /api/intelligence: {e}")
         return JSONResponse({
             'error': str(e),
@@ -243,25 +266,25 @@ async def api_intelligence(user: str = Depends(_verify), period: str = '7d'):
 
 @app.get("/api/clients")
 async def api_clients(user: str = Depends(_verify), search: str = '', limit: int = 50, offset: int = 0):
-    clients = await _repos.get_all_clients(_tenant_id, search or None, limit, offset)
+    clients = await _repos.get_all_clients(_default_tenant_id, search or None, limit, offset)
     return JSONResponse({'clients': clients})
 
 
 @app.get("/api/clients/{email:path}")
 async def api_client_detail(email: str, user: str = Depends(_verify)):
-    detail = await _repos.get_client_detail(_tenant_id, email)
+    detail = await _repos.get_client_detail(_default_tenant_id, email)
     return JSONResponse(detail)
 
 
 @app.get("/api/pipeline")
 async def api_pipeline(user: str = Depends(_verify), limit: int = 50, offset: int = 0, category: str = ''):
-    emails = await _repos.get_recent_emails(_tenant_id, limit, offset, category or None)
+    emails = await _repos.get_recent_emails(_default_tenant_id, limit, offset, category or None)
     return JSONResponse({'emails': emails})
 
 
 @app.get("/api/escalations")
 async def api_escalations(user: str = Depends(_verify)):
-    pending = await _repos.get_pending_escalations(_tenant_id)
+    pending = await _repos.get_pending_escalations(_default_tenant_id)
     return JSONResponse({'escalations': pending, 'count': len(pending)})
 
 
@@ -275,8 +298,8 @@ async def api_resolve_escalation(esc_id: int, request: Request, user: str = Depe
     if response_text and response_text.strip():
         try:
             from core.auto_scoring import learn_from_escalation
-            await learn_from_escalation(_db, _tenant_id, esc_id, response_text)
-        except Exception as e:
+            await learn_from_escalation(_db, _default_tenant_id, esc_id, response_text)
+        except (ImportError, asyncpg.PostgresError) as e:
             logger.debug(f"Erreur learn_from_escalation: {e}")
     return JSONResponse({'ok': True})
 
@@ -285,7 +308,7 @@ async def api_resolve_escalation(esc_id: int, request: Request, user: str = Depe
 async def api_get_settings(user: str = Depends(_verify)):
     """Charge tous les settings depuis la DB (tenant + custom_rules)."""
     try:
-        tenant = await _db.fetch_one("SELECT * FROM tenants WHERE id = $1", _tenant_id)
+        tenant = await _db.fetch_one("SELECT * FROM tenants WHERE id = $1", _default_tenant_id)
         if not tenant:
             return JSONResponse({})
         result = {
@@ -297,7 +320,7 @@ async def api_get_settings(user: str = Depends(_verify)):
             rules = json.loads(cr) if isinstance(cr, str) else cr
             result.update(rules)
         return JSONResponse(result)
-    except Exception as e:
+    except (asyncpg.PostgresError, KeyError, TypeError) as e:
         logger.debug(f"Erreur get_settings: {e}")
         return JSONResponse({})
 
@@ -311,12 +334,12 @@ async def api_save_settings(request: Request, user: str = Depends(_verify)):
     if brand or ret_addr:
         await _db.execute(
             "UPDATE tenants SET brand_name = COALESCE($1, brand_name), return_address = COALESCE($2, return_address) WHERE id = $3",
-            brand, ret_addr, _tenant_id
+            brand, ret_addr, _default_tenant_id
         )
     # Sauver tout le reste dans custom_rules (JSONB)
     if body:
         # Merger avec les rules existantes
-        tenant = await _db.fetch_one("SELECT custom_rules FROM tenants WHERE id = $1", _tenant_id)
+        tenant = await _db.fetch_one("SELECT custom_rules FROM tenants WHERE id = $1", _default_tenant_id)
         existing = {}
         if tenant and tenant.get('custom_rules'):
             cr = tenant['custom_rules']
@@ -324,7 +347,7 @@ async def api_save_settings(request: Request, user: str = Depends(_verify)):
         existing.update(body)
         await _db.execute(
             "UPDATE tenants SET custom_rules = $1 WHERE id = $2",
-            json.dumps(existing), _tenant_id
+            json.dumps(existing), _default_tenant_id
         )
     return JSONResponse({'ok': True})
 
@@ -338,9 +361,12 @@ async def api_chat(request: Request, user: str = Depends(_verify)):
     try:
         # Importer le chat handler
         from dashboard_chat import handle_chat_message
-        response = await handle_chat_message(message, _db, _repos, _shopify, _claude, _tenant_id)
+        conn = _get_connectors()
+        response = await handle_chat_message(message, _db, _repos, conn.get('shopify'),
+                                             _default_tenant_id,
+                                             email_connector=conn.get('email'))
         return JSONResponse({'response': response})
-    except Exception as e:
+    except (ImportError, asyncpg.PostgresError, anthropic.APIError) as e:
         logger.error(f"Chat erreur: {e}")
         return JSONResponse({'response': f'Erreur: {str(e)}'})
 
@@ -354,13 +380,18 @@ async def api_send_email(request: Request, user: str = Depends(_verify)):
     if not to_email or not email_body:
         return JSONResponse({'ok': False, 'error': 'Champs manquants'})
     try:
-        if _email_connector:
-            from knowledge.templates import email_template
-            html_body = email_template(email_body)
-            await _email_connector.send_email(to_email, subject, html_body)
+        conn = _get_connectors()
+        email_conn = conn.get('email')
+        if email_conn:
+            try:
+                from knowledge.templates import build_ai_response_html
+                html_body = build_ai_response_html(email_body, 'OKTAGON')
+            except ImportError:
+                html_body = f"<html><body style='font-family:Arial'>{email_body.replace(chr(10), '<br>')}</body></html>"
+            await email_conn.send_message(to_email, subject, html_body)
             return JSONResponse({'ok': True})
         return JSONResponse({'ok': False, 'error': 'Email connector non disponible'})
-    except Exception as e:
+    except (asyncpg.PostgresError, OSError) as e:
         return JSONResponse({'ok': False, 'error': str(e)})
 
 

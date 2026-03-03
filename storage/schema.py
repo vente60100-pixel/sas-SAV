@@ -1,7 +1,8 @@
 """
-OKTAGON SAV v4.0 — Schema DB avec tenant_id
+OKTAGON SAV v11.0 — Schema DB avec tenant_id
 Migration : ajoute la table tenants + tenant_id sur les tables existantes.
 """
+import asyncpg
 
 TENANT_TABLE = """
 CREATE TABLE IF NOT EXISTS tenants (
@@ -96,14 +97,14 @@ async def run_migration(db):
     for sql in ADD_TENANT_ID:
         try:
             await db.execute(sql)
-        except Exception:
-            pass  # Colonne existe deja
+        except asyncpg.PostgresError:  # Column/table may already exist
+            pass
 
     # 4. Migrer les donnees existantes
     for sql in MIGRATE_EXISTING:
         try:
             await db.execute(sql)
-        except Exception:
+        except asyncpg.PostgresError:  # Table may not exist yet
             pass
 
     logger.info("Migration v4.0 terminee", extra={"action": "migration_complete"})
@@ -124,7 +125,7 @@ async def run_migration_v41(db):
     for sql in V41_MIGRATIONS:
         try:
             await db.execute(sql)
-        except Exception:
+        except asyncpg.PostgresError:  # Column/table may already exist
             pass
     logger.info("Migration v4.1 terminee", extra={"action": "migration_v41_complete"})
 
@@ -153,5 +154,92 @@ async def run_migration_v50(db):
     try:
         await db.execute(V50_CLIENT_PROFILES)
         logger.info("Migration v5.0 terminee — client_profiles", extra={"action": "migration_v50_complete"})
-    except Exception as e:
+    except asyncpg.PostgresError as e:
         logger.warning(f"Migration v5.0 warning: {e}", extra={"action": "migration_v50_warning"})
+
+
+# === MIGRATION v10.5 — Tables manquantes ===
+
+V105_TICKETS = """
+CREATE TABLE IF NOT EXISTS tickets (
+    id SERIAL PRIMARY KEY,
+    tenant_id TEXT REFERENCES tenants(id),
+    email_from TEXT NOT NULL,
+    first_email_id INTEGER,
+    last_email_id INTEGER,
+    subject TEXT,
+    category TEXT,
+    status TEXT DEFAULT 'open',
+    message_count INTEGER DEFAULT 1,
+    response_count INTEGER DEFAULT 0,
+    last_client_message_at TIMESTAMPTZ,
+    last_response_at TIMESTAMPTZ,
+    resolved_at TIMESTAMPTZ,
+    resolution_type TEXT,
+    resolution_trigger TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+"""
+
+V105_FEEDBACK_EXAMPLES = """
+CREATE TABLE IF NOT EXISTS feedback_examples (
+    id SERIAL PRIMARY KEY,
+    tenant_id TEXT REFERENCES tenants(id),
+    category TEXT NOT NULL,
+    client_message TEXT NOT NULL,
+    correct_response TEXT NOT NULL,
+    source TEXT DEFAULT 'manual',
+    quality_score NUMERIC DEFAULT 0.5,
+    used_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+"""
+
+V105_TENANT_LEARNING = """
+CREATE TABLE IF NOT EXISTS tenant_learning (
+    id SERIAL PRIMARY KEY,
+    tenant_id TEXT REFERENCES tenants(id) UNIQUE,
+    confidence_threshold NUMERIC DEFAULT 0.85,
+    total_responses INTEGER DEFAULT 0,
+    positive_responses INTEGER DEFAULT 0,
+    negative_responses INTEGER DEFAULT 0,
+    last_adjusted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+"""
+
+V105_COLUMNS = [
+    "ALTER TABLE processed_emails ADD COLUMN IF NOT EXISTS response_text TEXT",
+    "ALTER TABLE processed_emails ADD COLUMN IF NOT EXISTS email_to TEXT",
+    "ALTER TABLE processed_emails ADD COLUMN IF NOT EXISTS satisfaction_score NUMERIC",
+    "ALTER TABLE processed_emails ADD COLUMN IF NOT EXISTS satisfaction_source TEXT",
+    "ALTER TABLE processed_emails ADD COLUMN IF NOT EXISTS client_reply_sentiment TEXT",
+    "ALTER TABLE escalations ADD COLUMN IF NOT EXISTS subject TEXT",
+    "ALTER TABLE escalations ADD COLUMN IF NOT EXISTS admin_action TEXT",
+    "ALTER TABLE escalations ADD COLUMN IF NOT EXISTS admin_response TEXT",
+    "ALTER TABLE escalations ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ",
+]
+
+
+async def run_migration_v105(db):
+    """Migration v10.5 — tables tickets, feedback_examples, tenant_learning + colonnes manquantes."""
+    from logger import logger
+    try:
+        await db.execute(V105_TICKETS)
+        await db.execute(V105_FEEDBACK_EXAMPLES)
+        await db.execute(V105_TENANT_LEARNING)
+        for sql in V105_COLUMNS:
+            try:
+                await db.execute(sql)
+            except asyncpg.PostgresError:  # Column/table may already exist
+                pass
+        # Initialiser tenant_learning pour OKTAGON si pas encore fait
+        await db.execute(
+            """INSERT INTO tenant_learning (tenant_id) VALUES ('oktagon')
+               ON CONFLICT (tenant_id) DO NOTHING"""
+        )
+        logger.info("Migration v10.5 terminee — tickets, feedback_examples, tenant_learning, colonnes",
+                     extra={"action": "migration_v105_complete"})
+    except asyncpg.PostgresError as e:
+        logger.warning(f"Migration v10.5 warning: {e}", extra={"action": "migration_v105_warning"})

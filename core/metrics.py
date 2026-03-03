@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v6.0 — Metrics & Monitoring
+OKTAGON SAV v11.0 — Metrics & Monitoring
 Collecte de métriques temps réel pour observabilité du moteur.
 
 Principe : Tout ce qui est mesurable est améliorable.

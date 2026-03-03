@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Constantes globales
+OKTAGON SAV v11.0 — Constantes globales
 Extraites de sav_oktagon.py, ai_agent.py, security.py
 """
 

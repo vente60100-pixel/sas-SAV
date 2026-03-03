@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v6.0 — Circuit Breaker Pattern
+OKTAGON SAV v11.0 — Circuit Breaker Pattern
 Protection intelligente contre les pannes d'API externes (Shopify, Claude).
 
 Pattern : CLOSED → OPEN → HALF_OPEN → CLOSED

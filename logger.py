@@ -1,10 +1,11 @@
 """
-OKTAGON SAV v2.4 - Logging structuré
+OKTAGON SAV v11.0 — Logging structuré
 Logs JSON pour production + logs lisibles pour dev
 """
 import logging
 import json
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from logging.handlers import RotatingFileHandler
@@ -16,7 +17,7 @@ class StructuredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Formate un log en JSON"""
         log_data = {
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),
@@ -102,7 +103,7 @@ def setup_logger(name: str = 'oktagon_sav', log_level: str = 'INFO') -> logging.
         return logger
 
     # Handler fichier : JSON structuré, rotation 10MB × 5
-    log_dir = Path('/root/oktagon-sav/logs')
+    log_dir = Path(os.environ.get('LOG_DIR', str(Path(__file__).parent / 'logs')))
     log_dir.mkdir(exist_ok=True)
 
     file_handler = RotatingFileHandler(

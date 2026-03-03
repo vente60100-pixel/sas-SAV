@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Modèle Tenant (multi-tenant)
+OKTAGON SAV v11.0 — Modèle Tenant (multi-tenant)
 Chaque boutique = 1 tenant avec sa propre config.
 """
 from dataclasses import dataclass, field

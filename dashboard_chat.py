@@ -1,10 +1,12 @@
 """
-OKTAGON SAV v7.0 — Chat IA avec Tools (lecture + actions)
+OKTAGON SAV v11.0 — Chat IA avec Tools (lecture + actions)
 Claude intégré au dashboard avec accès DB, Shopify, emails.
 Peut AGIR : envoyer des emails, résoudre des escalations, marquer des remboursements.
 """
+import asyncio
 import json
 import anthropic
+import asyncpg
 import os
 from logger import logger
 
@@ -172,16 +174,7 @@ async def _execute_tool(name: str, input_data: dict, db, repos, shopify, email_c
             clients = await repos.get_all_clients(tenant_id, search=query, limit=10)
             # Si pas de résultat par email, chercher par prénom
             if not clients:
-                rows = await db.fetch_all(
-                    """SELECT cp.email, cp.prenom, cp.derniere_commande, cp.vip,
-                              COUNT(pe.id) as total_emails
-                       FROM client_profiles cp
-                       LEFT JOIN processed_emails pe ON pe.email_from = cp.email AND pe.tenant_id = cp.tenant_id
-                       WHERE cp.tenant_id = $1 AND cp.prenom ILIKE $2
-                       GROUP BY cp.email, cp.prenom, cp.derniere_commande, cp.vip
-                       LIMIT 10""",
-                    tenant_id, f'%{query}%'
-                )
+                rows = await repos.search_clients_by_name(tenant_id, query)
                 if rows:
                     result = f"{len(rows)} client(s) trouvé(s) par prénom :\n"
                     for c in rows:
@@ -293,15 +286,14 @@ async def _execute_tool(name: str, input_data: dict, db, repos, shopify, email_c
             try:
                 from knowledge.templates import build_ai_response_html
                 full_html = build_ai_response_html(body_html, 'OKTAGON')
-            except Exception:
+            except ImportError:
                 full_html = f"<html><body style='font-family:Arial'>{body_html}</body></html>"
             success = await email_connector.send_message(to, subject, full_html)
             if success:
-                # Logger dans la DB
                 try:
                     await repos.log_outgoing(tenant_id, to, 'manual_dashboard')
-                except Exception:
-                    pass
+                except asyncpg.PostgresError as e:
+                    logger.debug(f"Erreur log outgoing: {e}")
                 return f"✅ Email envoyé à {to} avec succès !\nObjet: {subject}"
             return f"❌ Erreur lors de l'envoi de l'email à {to}"
 
@@ -328,24 +320,18 @@ async def _execute_tool(name: str, input_data: dict, db, repos, shopify, email_c
 
             # 2. Ajouter une note dans le profil
             try:
-                await db.execute(
-                    """UPDATE client_profiles SET notes = COALESCE(notes, '') || $1, updated_at = NOW()
-                       WHERE tenant_id = $2 AND email = $3""",
-                    f"\n[REMBOURSEMENT] #{order_num} — {reason}", tenant_id, email_addr
+                await repos.append_client_note(
+                    tenant_id, email_addr,
+                    f"\n[REMBOURSEMENT] #{order_num} — {reason}"
                 )
-            except Exception:
-                pass
+            except asyncpg.PostgresError as e:
+                logger.debug(f"Erreur note remboursement: {e}")
 
             # 3. Envoyer email de confirmation si demandé
             email_sent = False
             if send_conf and email_connector:
                 try:
-                    # Chercher le prénom
-                    profile = await db.fetch_one(
-                        "SELECT prenom FROM client_profiles WHERE tenant_id = $1 AND email = $2",
-                        tenant_id, email_addr
-                    )
-                    prenom = profile['prenom'] if profile and profile.get('prenom') else ''
+                    prenom = await repos.get_client_prenom(tenant_id, email_addr)
                     salut = f"Bonjour {prenom}" if prenom else "Bonjour"
 
                     body = f"""{salut},
@@ -364,7 +350,7 @@ L'équipe OKTAGON"""
                     email_sent = await email_connector.send_message(
                         email_addr, f"Confirmation de remboursement — Commande #{order_num}", full_html
                     )
-                except Exception as e:
+                except (asyncpg.PostgresError, OSError, ValueError, TypeError, KeyError) as e:
                     logger.error(f"Erreur envoi confirmation remboursement: {e}")
 
             result = f"✅ Remboursement marqué pour #{order_num} ({email_addr})\n"
@@ -377,23 +363,7 @@ L'équipe OKTAGON"""
         elif name == "add_note":
             email_addr = input_data['email']
             note = input_data['note']
-            # Vérifier si le profil existe
-            profile = await db.fetch_one(
-                "SELECT email FROM client_profiles WHERE tenant_id = $1 AND email = $2",
-                tenant_id, email_addr
-            )
-            if profile:
-                await db.execute(
-                    """UPDATE client_profiles SET notes = COALESCE(notes, '') || $1, updated_at = NOW()
-                       WHERE tenant_id = $2 AND email = $3""",
-                    f"\n[NOTE] {note}", tenant_id, email_addr
-                )
-            else:
-                await db.execute(
-                    """INSERT INTO client_profiles (tenant_id, email, notes, nb_contacts, updated_at)
-                       VALUES ($1, $2, $3, 0, NOW())""",
-                    tenant_id, email_addr, f"[NOTE] {note}"
-                )
+            await repos.append_client_note(tenant_id, email_addr, f"\n[NOTE] {note}")
             return f"✅ Note ajoutée pour {email_addr} : {note}"
 
         elif name == "resend_info":
@@ -401,19 +371,13 @@ L'équipe OKTAGON"""
             order_num = input_data['order_number']
             if not shopify or not email_connector:
                 return "Erreur : connecteurs non disponibles."
-            # Chercher la commande
             order = await shopify.get_order(order_num)
             if not order:
                 return f"Commande #{order_num} non trouvée."
             tracking = order.get('tracking_numbers', [])
             if not tracking:
                 return f"Commande #{order_num} n'a pas encore de numéro de suivi."
-            # Envoyer le mail
-            profile = await db.fetch_one(
-                "SELECT prenom FROM client_profiles WHERE tenant_id = $1 AND email = $2",
-                tenant_id, email_addr
-            )
-            prenom = profile['prenom'] if profile and profile.get('prenom') else ''
+            prenom = await repos.get_client_prenom(tenant_id, email_addr)
             salut = f"Bonjour {prenom}" if prenom else "Bonjour"
             tracking_str = ', '.join(tracking)
             body = f"""{salut},
@@ -440,7 +404,7 @@ L'équipe OKTAGON"""
 
         return f"Outil '{name}' non reconnu."
 
-    except Exception as e:
+    except (asyncpg.PostgresError, OSError, ValueError, TypeError, KeyError) as e:
         logger.error(f"Erreur tool {name}: {e}", extra={"action": "chat_tool_error"})
         return f"❌ Erreur outil {name}: {str(e)}"
 
@@ -503,6 +467,10 @@ async def chat_with_tools(message: str, db, repos, shopify, tenant_id: str,
 
         return text or "Action effectuée."
 
-    except Exception as e:
+    except (anthropic.APIError, asyncio.TimeoutError) as e:
         logger.error(f"Chat IA erreur: {e}", extra={"action": "chat_error"})
         return f"Erreur: {str(e)}"
+
+
+# Alias pour compatibilité avec dashboard.py
+handle_chat_message = chat_with_tools

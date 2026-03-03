@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Repository Pattern
+OKTAGON SAV v11.0 — Repository Pattern
 TOUT le SQL est ici. Aucune requête SQL ailleurs dans le code.
 """
 import json
@@ -33,7 +33,7 @@ class Repos:
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                ON CONFLICT (email_hash) DO NOTHING
                RETURNING id""",
-            tenant_id, email_hash, email_from, subject, body_preview[:200],
+            tenant_id, email_hash, email_from, subject, (body_preview or '')[:200],
             language, has_attachments, attachment_count, conversation_step,
             json.dumps(collected_data or {}), category, message_id, parent_id,
             response_sent, rerouted_from
@@ -190,10 +190,10 @@ class Repos:
 
     async def can_send(self, tenant_id: str, email_to: str,
                        max_per_hour: int = 3, max_per_day: int = 8) -> bool:
-        """Vérifie le rate limit pour cet email."""
+        """Vérifie le rate limit pour cet email destinataire."""
         row_1h = await self.db.fetch_one(
             """SELECT COUNT(*) as c FROM processed_emails
-               WHERE tenant_id = $1 AND email_from = $2
+               WHERE tenant_id = $1 AND email_to = $2
                AND response_sent = true
                AND created_at > NOW() - INTERVAL '1 hour'""",
             tenant_id, email_to
@@ -202,7 +202,7 @@ class Repos:
             return False
         row_24h = await self.db.fetch_one(
             """SELECT COUNT(*) as c FROM processed_emails
-               WHERE tenant_id = $1 AND email_from = $2
+               WHERE tenant_id = $1 AND email_to = $2
                AND response_sent = true
                AND created_at > NOW() - INTERVAL '24 hours'""",
             tenant_id, email_to
@@ -353,10 +353,11 @@ class Repos:
         stats = await self.get_client_profile(tenant_id, email)
         result = {**stats}
         if profile:
-            result['prenom'] = profile['prenom'] if 'prenom' in profile.keys() else None
-            result['dernier_ton'] = profile['dernier_ton'] if 'dernier_ton' in profile.keys() else None
-            result['vip'] = profile['vip'] if 'vip' in profile.keys() else False
-            result['derniere_commande'] = profile['derniere_commande'] if 'derniere_commande' in profile.keys() else None
+            pdict = dict(profile)
+            result['prenom'] = pdict.get('prenom')
+            result['dernier_ton'] = pdict.get('dernier_ton')
+            result['vip'] = pdict.get('vip', False)
+            result['derniere_commande'] = pdict.get('derniere_commande')
         return result
 
 
@@ -613,4 +614,272 @@ class Repos:
             'preview': (r['email_body_preview'] or '')[:200],
             'date': r['created_at'].isoformat() if r['created_at'] else None,
         } for r in rows]
+
+    # ══════════════════════════════════════════════════════════
+    # TICKETS (centralisé depuis ticket_tracker.py)
+    # ══════════════════════════════════════════════════════════
+
+    async def find_open_ticket(self, tenant_id: str, email_from: str):
+        """Trouve un ticket ouvert pour ce client."""
+        return await self.db.fetch_one(
+            """SELECT id, status FROM tickets
+               WHERE tenant_id = $1 AND email_from = $2
+               AND status IN ('open', 'responded')
+               ORDER BY created_at DESC LIMIT 1""",
+            tenant_id, email_from
+        )
+
+    async def create_ticket(self, tenant_id: str, email_from: str, email_id: int,
+                             subject: str, category: str = None) -> int:
+        """Crée un nouveau ticket."""
+        row = await self.db.fetch_one(
+            """INSERT INTO tickets
+               (tenant_id, email_from, first_email_id, last_email_id,
+                subject, category, status, message_count,
+                last_client_message_at, created_at, updated_at)
+               VALUES ($1, $2, $3, $3, $4, $5, 'open', 1, NOW(), NOW(), NOW())
+               RETURNING id""",
+            tenant_id, email_from, email_id, (subject or '')[:200], category
+        )
+        return row['id'] if row else None
+
+    async def reopen_ticket(self, ticket_id: int, email_id: int):
+        """Rouvre un ticket existant."""
+        await self.db.execute(
+            """UPDATE tickets SET
+                status = 'open', last_client_message_at = NOW(),
+                last_email_id = $1, message_count = message_count + 1,
+                updated_at = NOW()
+               WHERE id = $2""",
+            email_id, ticket_id
+        )
+
+    async def mark_ticket_responded(self, tenant_id: str, email_from: str):
+        """Marque le ticket comme répondu."""
+        await self.db.execute(
+            """UPDATE tickets SET
+                status = 'responded', last_response_at = NOW(),
+                response_count = response_count + 1, updated_at = NOW()
+               WHERE tenant_id = $1 AND email_from = $2 AND status = 'open'""",
+            tenant_id, email_from
+        )
+
+    async def resolve_ticket(self, tenant_id: str, email_from: str,
+                              resolution_type: str = 'explicit', trigger: str = None):
+        """Ferme un ticket."""
+        await self.db.execute(
+            """UPDATE tickets SET
+                status = 'resolved', resolved_at = NOW(),
+                resolution_type = $3, resolution_trigger = $4, updated_at = NOW()
+               WHERE tenant_id = $1 AND email_from = $2
+               AND status IN ('open', 'responded')""",
+            tenant_id, email_from, resolution_type, trigger
+        )
+
+    async def escalate_ticket(self, tenant_id: str, email_from: str):
+        """Marque le ticket comme escaladé."""
+        await self.db.execute(
+            """UPDATE tickets SET status = 'escalated', updated_at = NOW()
+               WHERE tenant_id = $1 AND email_from = $2
+               AND status IN ('open', 'responded')""",
+            tenant_id, email_from
+        )
+
+    async def get_open_tickets(self, tenant_id: str) -> list:
+        """Tous les tickets ouverts ou en attente."""
+        return await self.db.fetch_all(
+            """SELECT t.*, pe.email_subject, pe.email_body_preview,
+                      pe.response_text, pe.brain_category
+               FROM tickets t
+               LEFT JOIN processed_emails pe ON pe.id = t.last_email_id
+               WHERE t.tenant_id = $1 AND t.status IN ('open', 'responded')
+               ORDER BY CASE WHEN t.status = 'open' THEN 0 ELSE 1 END,
+                        t.last_client_message_at ASC""",
+            tenant_id
+        )
+
+    async def get_unanswered_tickets(self, tenant_id: str, cutoff) -> list:
+        """Tickets ouverts sans réponse depuis la date cutoff."""
+        return await self.db.fetch_all(
+            """SELECT t.*, pe.email_subject, pe.email_body_preview
+               FROM tickets t
+               LEFT JOIN processed_emails pe ON pe.id = t.last_email_id
+               WHERE t.tenant_id = $1 AND t.status = 'open'
+               AND t.last_client_message_at < $2
+               ORDER BY t.last_client_message_at ASC""",
+            tenant_id, cutoff
+        )
+
+    async def auto_close_stale_tickets(self, tenant_id: str, cutoff, reason: str) -> int:
+        """Ferme les tickets responded avant le cutoff."""
+        await self.db.execute(
+            """UPDATE tickets SET
+                status = 'resolved', resolved_at = NOW(),
+                resolution_type = 'auto_silence', resolution_trigger = $3,
+                updated_at = NOW()
+               WHERE tenant_id = $1 AND status = 'responded'
+               AND last_response_at < $2""",
+            tenant_id, cutoff, reason
+        )
+        row = await self.db.fetch_one(
+            """SELECT COUNT(*) as c FROM tickets
+               WHERE tenant_id = $1 AND resolution_type = 'auto_silence'
+               AND resolved_at > NOW() - INTERVAL '1 minute'""",
+            tenant_id
+        )
+        return row['c'] if row else 0
+
+    async def get_ticket_stats(self, tenant_id: str) -> dict:
+        """Stats des tickets."""
+        row = await self.db.fetch_one(
+            """SELECT
+                COUNT(*) FILTER (WHERE status = 'open') as open_count,
+                COUNT(*) FILTER (WHERE status = 'responded') as waiting_count,
+                COUNT(*) FILTER (WHERE status = 'resolved') as resolved_count,
+                COUNT(*) FILTER (WHERE status = 'escalated') as escalated_count,
+                COUNT(*) as total
+               FROM tickets WHERE tenant_id = $1""",
+            tenant_id
+        )
+        return dict(row) if row else {
+            'open_count': 0, 'waiting_count': 0,
+            'resolved_count': 0, 'escalated_count': 0, 'total': 0
+        }
+
+    # ══════════════════════════════════════════════════════════
+    # FOLLOWUP (centralisé depuis followup.py)
+    # ══════════════════════════════════════════════════════════
+
+    async def get_unanswered_emails(self, tenant_id: str) -> list:
+        """Emails sans réponse des 7 derniers jours."""
+        return await self.db.fetch_all(
+            """SELECT email_from, email_subject, email_body_preview,
+                      conversation_step, created_at
+               FROM processed_emails
+               WHERE tenant_id = $1 AND response_sent = false
+               AND created_at > NOW() - INTERVAL '7 days'
+               ORDER BY created_at ASC""",
+            tenant_id
+        )
+
+    async def get_unresolved_conversations(self, tenant_id: str) -> list:
+        """Conversations où le client a écrit mais n'a pas eu de réponse depuis 2h."""
+        return await self.db.fetch_all(
+            """WITH last_messages AS (
+                SELECT email_from,
+                       MAX(created_at) as last_client_msg,
+                       MAX(CASE WHEN response_sent = true THEN created_at END) as last_response
+                FROM processed_emails
+                WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '7 days'
+                GROUP BY email_from
+            )
+            SELECT email_from, last_client_msg, last_response
+            FROM last_messages
+            WHERE last_client_msg > COALESCE(last_response, '1970-01-01')
+            AND last_client_msg < NOW() - INTERVAL '2 hours'
+            ORDER BY last_client_msg ASC""",
+            tenant_id
+        )
+
+    async def get_daily_mail_stats(self, tenant_id: str) -> dict:
+        """Stats emails des dernières 24h pour rapport quotidien."""
+        return await self.db.fetch_one(
+            """SELECT
+                COUNT(*) as total,
+                COUNT(CASE WHEN response_sent = true THEN 1 END) as answered,
+                COUNT(CASE WHEN response_sent = false THEN 1 END) as unanswered,
+                COUNT(CASE WHEN conversation_step = 'escalated_to_human' THEN 1 END) as escalated
+               FROM processed_emails
+               WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '24 hours'""",
+            tenant_id
+        )
+
+    async def get_daily_scoring_stats(self, tenant_id: str) -> dict:
+        """Stats scoring des dernières 24h."""
+        return await self.db.fetch_one(
+            """SELECT
+                COUNT(CASE WHEN response_quality LIKE 'excellent%' THEN 1 END) as excellent,
+                COUNT(CASE WHEN response_quality LIKE 'good%' THEN 1 END) as good,
+                COUNT(CASE WHEN response_quality LIKE 'bad%' THEN 1 END) as bad,
+                COUNT(CASE WHEN response_quality IS NOT NULL THEN 1 END) as scored
+               FROM processed_emails
+               WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '24 hours'""",
+            tenant_id
+        )
+
+    async def get_daily_examples_count(self, tenant_id: str) -> int:
+        """Nombre d'exemples appris dans les dernières 24h."""
+        row = await self.db.fetch_one(
+            """SELECT COUNT(*) as c FROM feedback_examples
+               WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '24 hours'""",
+            tenant_id
+        )
+        return row['c'] if row else 0
+
+    async def get_daily_loop_stats(self, tenant_id: str) -> dict:
+        """Stats boucles/mismatch des dernières 24h."""
+        return await self.db.fetch_one(
+            """SELECT
+                COUNT(CASE WHEN brain_category = 'BOUCLE' THEN 1 END) as boucles,
+                COUNT(CASE WHEN brain_category = 'MISMATCH' THEN 1 END) as mismatch,
+                COUNT(CASE WHEN detection_method = 'shopify_name' THEN 1 END) as found_by_name,
+                COUNT(CASE WHEN detection_method = 'shopify_confirmation' THEN 1 END) as found_by_confirmation
+               FROM processed_emails
+               WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '24 hours'""",
+            tenant_id
+        )
+
+    async def get_old_escalations_count(self, tenant_id: str) -> int:
+        """Escalations non résolues depuis +48h."""
+        row = await self.db.fetch_one(
+            """SELECT COUNT(*) as c FROM escalations
+               WHERE tenant_id = $1 AND resolved = false
+               AND created_at < NOW() - INTERVAL '48 hours'""",
+            tenant_id
+        )
+        return row['c'] if row else 0
+
+    # ══════════════════════════════════════════════════════════
+    # CHAT DASHBOARD (centralisé depuis dashboard_chat.py)
+    # ══════════════════════════════════════════════════════════
+
+    async def search_clients_by_name(self, tenant_id: str, query: str, limit: int = 10) -> list:
+        """Cherche des clients par prénom dans les profils."""
+        return await self.db.fetch_all(
+            """SELECT cp.email, cp.prenom, cp.derniere_commande, cp.vip,
+                      COUNT(pe.id) as total_emails
+               FROM client_profiles cp
+               LEFT JOIN processed_emails pe ON pe.email_from = cp.email AND pe.tenant_id = cp.tenant_id
+               WHERE cp.tenant_id = $1 AND cp.prenom ILIKE $2
+               GROUP BY cp.email, cp.prenom, cp.derniere_commande, cp.vip
+               LIMIT $3""",
+            tenant_id, f'%{query}%', limit
+        )
+
+    async def get_client_prenom(self, tenant_id: str, email: str) -> str:
+        """Récupère le prénom d'un client."""
+        row = await self.db.fetch_one(
+            "SELECT prenom FROM client_profiles WHERE tenant_id = $1 AND email = $2",
+            tenant_id, email
+        )
+        return row['prenom'] if row and row.get('prenom') else ''
+
+    async def append_client_note(self, tenant_id: str, email: str, note: str):
+        """Ajoute une note au profil client."""
+        profile = await self.db.fetch_one(
+            "SELECT email FROM client_profiles WHERE tenant_id = $1 AND email = $2",
+            tenant_id, email
+        )
+        if profile:
+            await self.db.execute(
+                """UPDATE client_profiles SET notes = COALESCE(notes, '') || $1, updated_at = NOW()
+                   WHERE tenant_id = $2 AND email = $3""",
+                note, tenant_id, email
+            )
+        else:
+            await self.db.execute(
+                """INSERT INTO client_profiles (tenant_id, email, notes, nb_contacts, updated_at)
+                   VALUES ($1, $2, $3, 0, NOW())""",
+                tenant_id, email, note
+            )
 

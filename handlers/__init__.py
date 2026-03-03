@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v5.0 — Handler Registry (simplifié)
+OKTAGON SAV v11.0 — Handler Registry (simplifié)
 Plus que 2 handlers pour les steps intermédiaires.
 Tout le reste est géré par le cerveau unifié.
 """

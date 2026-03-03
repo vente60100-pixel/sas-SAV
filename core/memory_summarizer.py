@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v6.2 — Mémoire résumée intelligente.
+OKTAGON SAV v11.0 — Mémoire résumée intelligente.
 
 Au lieu de garder 8 messages bruts :
 - Résumé IA des anciens échanges (> 5)
@@ -124,7 +124,7 @@ RÉSUMÉ FACTUEL (3-5 lignes, en français, UNIQUEMENT les faits visibles ci-des
         logger.info(f"Résumé historique généré ({len(rows)} échanges → {len(summary)} chars)",
                     extra={'action': 'history_summarized'})
         return summary
-    except Exception as e:
+    except (anthropic.APIError, anthropic.APITimeoutError) as e:
         logger.warning(f"Erreur résumé historique: {e}", extra={'action': 'summary_error'})
         # Fallback : juste les catégories et dates
         fallback = ""

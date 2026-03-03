@@ -1,5 +1,5 @@
 """
-OKTAGON SAV v4.0 — Interface abstraite E-commerce
+OKTAGON SAV v11.0 — Interface abstraite E-commerce
 Shopify aujourd'hui, WooCommerce/PrestaShop demain.
 """
 from abc import ABC, abstractmethod
