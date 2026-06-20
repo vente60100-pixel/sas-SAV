@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BASTION · Avatar client & VOC — Tableau de bord</title>
+<style>
+  :root{
+    --bg:#0d0f12; --panel:#15181d; --panel2:#1b1f26; --line:#262b33;
+    --ink:#e8eaed; --mut:#9aa3ad; --dim:#6b7480;
+    --acc:#ff5a1f; --acc2:#ffb020; --grn:#3ddc84; --red:#ff5d5d; --blu:#5aa9ff;
+    --r:14px; --mw:1100px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#1a1d24 0,var(--bg) 55%);
+    color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:inherit}
+  .wrap{max-width:var(--mw);margin:0 auto;padding:0 20px}
+
+  /* NAV */
+  header.top{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);
+    background:rgba(13,15,18,.82);border-bottom:1px solid var(--line)}
+  .topin{max-width:var(--mw);margin:0 auto;display:flex;align-items:center;gap:18px;
+    padding:12px 20px;flex-wrap:wrap}
+  .brand{font-weight:800;letter-spacing:.5px}
+  .brand b{color:var(--acc)}
+  nav{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  nav a{font-size:13px;color:var(--mut);text-decoration:none;padding:6px 11px;border-radius:999px;
+    border:1px solid transparent;transition:.15s}
+  nav a:hover{color:var(--ink);border-color:var(--line);background:var(--panel)}
+
+  /* HERO */
+  .hero{padding:54px 0 30px}
+  .kick{color:var(--acc2);font-weight:700;letter-spacing:2px;font-size:12px;text-transform:uppercase}
+  h1{font-size:clamp(30px,5vw,52px);line-height:1.05;margin:.25em 0 .35em;font-weight:850;letter-spacing:-.5px}
+  h1 .hl{color:var(--acc)}
+  .lead{font-size:19px;color:var(--mut);max-width:760px}
+  .bigquote{margin:26px 0 0;padding:20px 24px;border-left:4px solid var(--acc);
+    background:linear-gradient(90deg,rgba(255,90,31,.10),transparent);border-radius:0 var(--r) var(--r) 0}
+  .bigquote .en{font-size:21px;font-weight:650;font-style:italic}
+  .bigquote .fr{color:var(--mut);margin-top:6px}
+  .bigquote .src{color:var(--dim);font-size:12px;margin-top:8px}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:34px 0 10px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+  .stat b{display:block;font-size:26px;color:var(--acc2);font-weight:800}
+  .stat span{color:var(--mut);font-size:13px}
+
+  /* SECTIONS */
+  section{padding:40px 0;border-top:1px solid var(--line)}
+  .h2{display:flex;align-items:baseline;gap:12px;margin:0 0 22px}
+  .h2 .n{color:var(--acc);font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
+  .h2 h2{font-size:26px;margin:0;font-weight:800;letter-spacing:-.3px}
+  .h2 .sub{color:var(--dim);font-size:14px;margin-left:auto}
+
+  .grid{display:grid;gap:16px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px}
+  .card h3{margin:0 0 10px;font-size:15px;letter-spacing:.3px;text-transform:uppercase;color:var(--acc2)}
+  .card ul{margin:0;padding-left:18px}
+  .card li{margin:7px 0;color:var(--ink)}
+  .card li span{color:var(--mut)}
+
+  /* CONFLICT */
+  .conflict{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center}
+  .fear{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+  .fear.red{border-color:#3a2226}.fear.blu{border-color:#22303a}
+  .fear .t{font-weight:800;font-size:15px;margin-bottom:8px}
+  .fear.red .t{color:var(--red)}.fear.blu .t{color:var(--blu)}
+  .vs{font-weight:900;color:var(--acc);font-size:18px;text-align:center}
+  .resolve{margin-top:16px;background:linear-gradient(90deg,rgba(61,220,132,.10),transparent);
+    border:1px solid #1f3a2a;border-radius:var(--r);padding:16px 20px}
+  .resolve b{color:var(--grn)}
+
+  /* AWARENESS */
+  .aw{counter-reset:a}
+  .awrow{display:grid;grid-template-columns:auto 1fr;gap:16px;padding:16px 0;border-bottom:1px dashed var(--line)}
+  .awrow:last-child{border-bottom:0}
+  .badge{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-weight:900;
+    background:var(--panel2);border:1px solid var(--line);color:var(--acc2)}
+  .awrow .lab{font-weight:750}
+  .awrow .desc{color:var(--mut);font-size:14.5px}
+  .awrow .hook{margin-top:6px;font-size:13px;color:var(--blu)}
+
+  /* VERBATIM TABS */
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .tab{cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--mut);
+    padding:8px 14px;border-radius:999px;font-size:13px;font-weight:650;transition:.15s}
+  .tab:hover{color:var(--ink)}
+  .tab.on{background:var(--acc);border-color:var(--acc);color:#1a0b04}
+  .vb{border-left:3px solid var(--line);padding:12px 16px;margin:0 0 12px;background:var(--panel);
+    border-radius:0 10px 10px 0;display:none}
+  .vb.show{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .vb .en{font-weight:600;font-style:italic}
+  .vb .fr{color:var(--mut);font-size:14px;margin-top:3px}
+  .vb .src{color:var(--dim);font-size:12px;margin-top:6px}
+  .vb.neg{border-left-color:var(--red)}
+  .vb.pos{border-left-color:var(--grn)}
+
+  /* LEXIQUE */
+  .lex{display:flex;flex-wrap:wrap;gap:10px}
+  .chip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 13px;font-size:13.5px}
+  .chip b{color:var(--acc2)} .chip span{color:var(--mut)}
+  .doublecol{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  .do,.dont{border-radius:var(--r);padding:14px 18px;border:1px solid var(--line)}
+  .do{background:rgba(61,220,132,.06)} .dont{background:rgba(255,93,93,.06)}
+  .do h4{color:var(--grn);margin:0 0 8px} .dont h4{color:var(--red);margin:0 0 8px}
+  .do ul,.dont ul{margin:0;padding-left:18px;font-size:14px}
+
+  /* ANGLES */
+  .angle{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+  .angle .tag{font-size:11px;font-weight:800;color:var(--acc);letter-spacing:1px;text-transform:uppercase}
+  .angle h3{margin:4px 0 8px;font-size:18px}
+  .angle .from{font-size:13px;color:var(--dim);font-style:italic;margin-bottom:10px}
+  .angle .hooks{list-style:none;padding:0;margin:0}
+  .angle .hooks li{font-size:14px;padding:7px 10px;margin:6px 0;background:var(--panel2);
+    border-radius:8px;border:1px solid var(--line)}
+  .angle .hooks li::before{content:"›";color:var(--acc);margin-right:8px;font-weight:900}
+  .star{color:var(--acc2)}
+
+  /* OBJECTIONS */
+  .obj{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+  .obj .q{font-weight:750;color:var(--red)}
+  .obj .q::before{content:"« ";color:var(--dim)} .obj .q::after{content:" »";color:var(--dim)}
+  .obj .a{margin-top:9px;color:var(--ink);font-size:14.5px}
+  .obj .a b{color:var(--grn)}
+
+  footer{padding:36px 0 60px;color:var(--dim);font-size:13px;border-top:1px solid var(--line)}
+  .pill{display:inline-block;font-size:11px;color:var(--mut);border:1px solid var(--line);
+    border-radius:999px;padding:2px 9px;margin-left:6px}
+  @media(max-width:820px){.stats{grid-template-columns:1fr 1fr}.g2,.g3,.conflict,.doublecol{grid-template-columns:1fr}.vs{transform:rotate(90deg)}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="topin">
+    <div class="brand"><b>BASTION</b> · Avatar &amp; VOC</div>
+    <nav>
+      <a href="#avatar">Avatar</a>
+      <a href="#conflit">Conflit</a>
+      <a href="#conscience">Conscience</a>
+      <a href="#verbatims">Verbatims</a>
+      <a href="#lexique">Lexique</a>
+      <a href="#angles">Angles</a>
+      <a href="#objections">Objections</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="kick">Pantalon cargo moto · CE EN 17092 Class AA · Marché UK</div>
+    <h1>Le motard qui veut être protégé <span class="hl">sans en avoir l'air</span>.</h1>
+    <p class="lead">Il roule en jean parce qu'il refuse de ressembler à un pilote de circuit pour aller bosser.
+      BASTION dissout son dilemme : protection AA invisible, mettable du lit au bureau, à 49,99 £.</p>
+
+    <div class="bigquote">
+      <div class="en">“I want to feel safe, but I don't want to look like a transformer just to bop around.”</div>
+      <div class="fr">Je veux me sentir en sécurité, mais pas avoir l'air d'un Transformer juste pour faire un tour en ville.</div>
+      <div class="src">— jessiejobst.substack.com · le verbatim qui résume tout l'avatar</div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><b>110+</b><span>verbatims clients réels &amp; sourcés</span></div>
+      <div class="stat"><b>0,6 s</b><span>tenue d'un jean normal sur l'asphalte (vs 7 s pour un riding jean)</span></div>
+      <div class="stat"><b>£49,99</b><span>vs 300–460 £ chez les rivaux AAA</span></div>
+      <div class="stat"><b>30–60 mph</b><span>l'usage réel = pile la zone d'une Class AA</span></div>
+    </div>
+  </div>
+
+  <!-- AVATAR -->
+  <section id="avatar">
+    <div class="h2"><span class="n">01</span><h2>Le portrait-robot</h2><span class="sub">« The everyday rider »</span></div>
+    <div class="grid g3">
+      <div class="card"><h3>Qui</h3><ul>
+        <li>Homme <b>30–50 ans</b> en cœur de cible <span>(+ segment féminin réel, mal servi)</span></li>
+        <li>Commuter quotidien <b>+ balade week-end</b></li>
+        <li>Pragmatique du risque : <b>« AlmostATGATT »</b>, pas fanatique</li>
+      </ul></div>
+      <div class="card"><h3>Sa moto / son usage</h3><ul>
+        <li>Roadster, A2, custom, scooter GT, trail urbain</li>
+        <li>Ville + nationale, <b>30–60 mph</b></li>
+        <li>« my go-to for <b>work commutes</b> »</li>
+      </ul></div>
+      <div class="card"><h3>Son rapport à l'argent</h3><ul>
+        <li>Refroidi par le premium <b>(300–460 £)</b></li>
+        <li>49,99 £ = aubaine… <span>mais déclenche la méfiance « trop pas cher »</span></li>
+        <li>Veut <b>le même niveau de protection sans le prix</b></li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- CONFLIT -->
+  <section id="conflit">
+    <div class="h2"><span class="n">02</span><h2>Son conflit central</h2><span class="sub">deux peurs qui se contredisent</span></div>
+    <div class="conflict">
+      <div class="fear red">
+        <div class="t">⚠️ Peur n°1 — la chute</div>
+        Il a vu ce que l'asphalte fait à la peau.<br>
+        <i>“If you go down in regular jeans, you're grinding skin in seconds.”</i>
+      </div>
+      <div class="vs">VS</div>
+      <div class="fear blu">
+        <div class="t">🙄 Peur n°2 — le ridicule &amp; la contrainte</div>
+        Refuse le look « Power Ranger », se changer au boulot, crever de chaud, payer 300 £.<br>
+        <i>“It looks ‘odd’ when standing with the pads fitted.”</i>
+      </div>
+    </div>
+    <div class="resolve">
+      Par défaut, il <b>roule en jean normal et se ment</b> (« regular jeans is fine for short city rides »).
+      → <b>BASTION supprime le choix</b> : protection AA invisible + mettable toute la journée + 49,99 £. Il n'a plus à arbitrer.
+    </div>
+  </section>
+
+  <!-- CONSCIENCE -->
+  <section id="conscience">
+    <div class="h2"><span class="n">03</span><h2>3 niveaux de conscience</h2><span class="sub">pour router le message selon le trafic</span></div>
+    <div class="aw">
+      <div class="awrow"><div class="badge">A</div><div>
+        <div class="lab">Inconscient — « le jean normal suffit »</div>
+        <div class="desc">Croit qu'un Levi's le protège. À frapper avec le chiffre brutal : jean = 0,6 s, riding jean = 7 s.</div>
+        <div class="hook">Hook : “Your everyday jeans last 0.6 seconds on tarmac. Ours are tested to CE AA.”</div>
+      </div></div>
+      <div class="awrow"><div class="badge">B</div><div>
+        <div class="lab">Conscient du problème, refroidi par les solutions</div>
+        <div class="desc">Sait qu'il faut un riding jean, mais rebuté par le look gear, la chaleur, le prix, les tailles.</div>
+        <div class="hook">Hook : “Protection that doesn't make you look like a Power Ranger at the lights.”</div>
+      </div></div>
+      <div class="awrow"><div class="badge">C</div><div>
+        <div class="lab">Conscient du produit, mais méfiant</div>
+        <div class="desc">Voit AA + 49,99 £ + marque inconnue → pense « arnaque / faux CE type Amazon ». Réponse = PREUVE.</div>
+        <div class="hook">Hook : “£49.99 and genuinely CE AA. Read the certificate, not the hype.”</div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- VERBATIMS -->
+  <section id="verbatims">
+    <div class="h2"><span class="n">04</span><h2>Ce qu'ils disent vraiment</h2><span class="sub">verbatims réels · clique pour filtrer</span></div>
+    <div class="tabs">
+      <div class="tab on" data-f="all">Tout</div>
+      <div class="tab" data-f="dream">Désirs</div>
+      <div class="tab" data-f="fear">Peurs</div>
+      <div class="tab" data-f="frust">Frustrations</div>
+      <div class="tab" data-f="trig">Déclencheurs</div>
+    </div>
+
+    <div class="vb show pos" data-c="dream">
+      <div class="en">“Nobody realises they're not normal jeans unless you tell them.”</div>
+      <div class="fr">Personne ne capte que c'est pas un jean normal, sauf si tu le dis.</div>
+      <div class="src">James · 5★ · Sportsbikeshop (Bull-it Onyx)</div></div>
+
+    <div class="vb show pos" data-c="dream">
+      <div class="en">“I don't feel like I'm wearing bike gear, so would definitely recommend.”</div>
+      <div class="fr">J'ai pas l'impression de porter de l'équipement moto, je recommande à 100%.</div>
+      <div class="src">Sam · 5★ · Sportsbikeshop (Bull-it Onyx)</div></div>
+
+    <div class="vb show pos" data-c="dream">
+      <div class="en">“I'm just pleased my 3 children still have got a mother they can cuddle and argue with.”</div>
+      <div class="fr">Je suis juste heureuse que mes 3 enfants aient encore une mère à câliner et avec qui se chamailler.</div>
+      <div class="src">Lei (récit de chute) · pandomoto.com</div></div>
+
+    <div class="vb show pos" data-c="dream">
+      <div class="en">“These fit so well I accidentally wore them to work the day I got them.”</div>
+      <div class="fr">Ils vont tellement bien que je les ai portés au boulot par accident le jour où je les ai reçus.</div>
+      <div class="src">Charlie C · 5★ · Sportsbikeshop (Bull-it Tactical)</div></div>
+
+    <div class="vb show neg" data-c="fear">
+      <div class="en">“After coming off at 20 last week and having my ar*e road rashed I was quite surprised just how poorly they performed.”</div>
+      <div class="fr">Après être tombé à 20 (mph) la semaine dernière et m'être pelé le c** sur la route, surpris à quel point ils ont mal protégé.</div>
+      <div class="src">Matthew V · 2★ · Sportsbikeshop (sur un concurrent) — la preuve que tous les jeans ne se valent pas</div></div>
+
+    <div class="vb show neg" data-c="fear">
+      <div class="en">“I was thrown on to the road and slid pretty much from the roundabout into a bus stop.”</div>
+      <div class="fr">J'ai été éjecté sur la route et j'ai glissé du rond-point jusqu'à un arrêt de bus.</div>
+      <div class="src">Récit de chute · roadskin.co.uk</div></div>
+
+    <div class="vb show neg" data-c="fear">
+      <div class="en">“The ambulance driver had to cut all the gear off and even they were amazed how well made my clothing were.”</div>
+      <div class="fr">L'ambulancier a dû découper tout l'équipement, même eux étaient bluffés par la qualité.</div>
+      <div class="src">Lei (récit de chute) · pandomoto.com</div></div>
+
+    <div class="vb show neg" data-c="frust">
+      <div class="en">“They do feel hot and a bit sticky.”</div>
+      <div class="fr">Ils tiennent vraiment chaud et collent un peu.</div>
+      <div class="src">MCN · Pando Mark (frustration n°1 des rivaux)</div></div>
+
+    <div class="vb show neg" data-c="frust">
+      <div class="en">“Well made jeans but the legs ride up too much when sitting.”</div>
+      <div class="fr">Bien fabriqués mais les jambes remontent trop quand on est assis.</div>
+      <div class="src">Andrew G · 2★ · Sportsbikeshop (Oxford)</div></div>
+
+    <div class="vb show neg" data-c="frust">
+      <div class="en">“They do come up large so 32 for a 34 waist fits me perfectly.”</div>
+      <div class="fr">Ils taillent grand : du 32 pour un tour de taille 34 me va parfaitement.</div>
+      <div class="src">David M · 5★ · Sportsbikeshop — le casse-tête des tailles</div></div>
+
+    <div class="vb show pos" data-c="trig">
+      <div class="en">“Feel really comfy, look great and I feel as protected as I do with my laminates.”</div>
+      <div class="fr">Très confortables, beaux, et je me sens aussi protégé qu'avec mes textiles haut de gamme.</div>
+      <div class="src">Mark · 5★ · Sportsbikeshop (Richa Carter)</div></div>
+
+    <div class="vb show pos" data-c="trig">
+      <div class="en">“Night and day between wearing normal leathers.”</div>
+      <div class="fr">Le jour et la nuit comparé au cuir classique.</div>
+      <div class="src">Chris A · 5★ · Sportsbikeshop (Richa Carter)</div></div>
+
+    <div class="vb show pos" data-c="trig">
+      <div class="en">“BEST JEANS AT THE PRICE.”</div>
+      <div class="fr">Meilleurs jeans à ce prix.</div>
+      <div class="src">ALAN · 5★ · Sportsbikeshop (Oxford AAA)</div></div>
+  </section>
+
+  <!-- LEXIQUE -->
+  <section id="lexique">
+    <div class="h2"><span class="n">05</span><h2>Parle SA langue</h2><span class="sub">les mots exacts à reprendre en pub</span></div>
+    <div class="lex">
+      <div class="chip"><b>came off / went down</b> <span>· tomber de la moto</span></div>
+      <div class="chip"><b>slide / slid</b> <span>· la glisse (ce qui blesse)</span></div>
+      <div class="chip"><b>lowside</b> <span>· chute avant qui glisse</span></div>
+      <div class="chip"><b>road rash</b> <span>· abrasion cutanée</span></div>
+      <div class="chip"><b>grinding skin</b> <span>· rabler la peau</span></div>
+      <div class="chip"><b>gear</b> <span>· l'équipement moto</span></div>
+      <div class="chip"><b>textiles / laminates</b> <span>· tenues techniques (look astronaute)</span></div>
+      <div class="chip"><b>ATGATT</b> <span>· All The Gear, All The Time</span></div>
+      <div class="chip"><b>dress for the slide, not the ride</b> <span>· slogan culte</span></div>
+      <div class="chip"><b>single layer</b> <span>· mono-couche (plus frais)</span></div>
+      <div class="chip"><b>looks like normal jeans</b> <span>· LE bénéfice clé</span></div>
+      <div class="chip"><b>Power Ranger / Robocop</b> <span>· le repoussoir à éviter</span></div>
+    </div>
+    <div class="doublecol">
+      <div class="do"><h4>✓ À DIRE</h4><ul>
+        <li>“came off”, “went down”, “slid” (pas « accident »)</li>
+        <li>“road rash”, “grinding skin” — viscéral, c'est leur mot</li>
+        <li>“looks like normal jeans”, “nobody realises”</li>
+        <li>“CE AA / EN 17092” — leur repère de confiance</li>
+      </ul></div>
+      <div class="dont"><h4>✗ À ÉVITER</h4><ul>
+        <li>“premium lifestyle apparel”</li>
+        <li>“urban mobility solution”</li>
+        <li>“tactical-inspired” → sonne marketing</li>
+        <li>Tout jargon qui ne sort pas de leur bouche</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ANGLES -->
+  <section id="angles">
+    <div class="h2"><span class="n">06</span><h2>Les 4 angles à tester en priorité</h2><span class="sub">12 au total dans le doc · top 4 ici</span></div>
+    <div class="grid g2">
+      <div class="angle">
+        <div class="tag"><span class="star">★</span> Priorité 1 · différenciateur unique</div>
+        <h3>« Nobody realises » — la protection invisible</h3>
+        <div class="from">Source : “nobody realises they're not normal jeans unless you tell them”</div>
+        <ul class="hooks">
+          <li>CE-rated armour. Cargo-pant looks. <b>Nobody clocks it as gear.</b></li>
+          <li>Walk into the office. Nobody knows you're wearing protection.</li>
+          <li>Looks like cargos. Slides like armour. Tested to CE AA EN 17092.</li>
+        </ul>
+      </div>
+      <div class="angle">
+        <div class="tag"><span class="star">★</span> Priorité 2 · meilleur scroll-stopper froid</div>
+        <h3>« 0,6 seconde » — la peur chiffrée</h3>
+        <div class="from">Source : “Standard jeans lasted about 0.6 seconds on a belt sander”</div>
+        <ul class="hooks">
+          <li>Your everyday jeans last 0.6 seconds on tarmac. Ours are CE AA.</li>
+          <li>Skin vs asphalt at 40mph. How long do your jeans buy you?</li>
+          <li>0.6 seconds. Don't ride on borrowed time.</li>
+        </ul>
+      </div>
+      <div class="angle">
+        <div class="tag"><span class="star">★</span> Priorité 3 · convertit le comparateur</div>
+        <h3>« Same protection, not £300 »</h3>
+        <div class="from">Source : rivaux à $413–$464 · “as protected as my laminates”</div>
+        <ul class="hooks">
+          <li>CE-rated cargo pants. £49.99 — not £400.</li>
+          <li>The £300 jeans protect your legs. So do ours. Spot the price.</li>
+          <li>Why pay £400 to feel as safe? CE AA from £49.99.</li>
+        </ul>
+      </div>
+      <div class="angle">
+        <div class="tag"><span class="star">★</span> Priorité 4 · désamorce l'objection qui tue</div>
+        <h3>« Real AA, not Amazon fake »</h3>
+        <div class="from">Source : “fake Cordura and ‘CE armor’ tags” · “wouldn't last 3 seconds”</div>
+        <ul class="hooks">
+          <li>Half of 'moto denim' fails in 3 seconds. Here's our CE EN 17092 certificate.</li>
+          <li>Cheap riding jeans fake the tags. We'll show you the test report.</li>
+          <li>£49.99 and genuinely CE AA. Read the certificate, not the hype.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- OBJECTIONS -->
+  <section id="objections">
+    <div class="h2"><span class="n">07</span><h2>Objections → réponses</h2><span class="sub">à mettre sur la page produit</span></div>
+    <div class="grid g2">
+      <div class="obj"><div class="q">49,99 £ pour du CE AA ? C'est louche / faux</div>
+        <div class="a"><b>Preuve :</b> afficher le certificat EN 17092 + n° de rapport de test + photo macro des panneaux Cordura. Bandeau « £49.99 = offre de lancement (RRP £119.99), pas la qualité ».</div></div>
+      <div class="obj"><div class="q">Marque inconnue, jamais entendu parler</div>
+        <div class="a"><b>Preuve :</b> avis vérifiés + récits de chute clients en haut de page + garantie 30 j. « CE ratings matter more than the logo. »</div></div>
+      <div class="obj"><div class="q">Les riding jeans, c'est chaud et raide</div>
+        <div class="a"><b>Preuve :</b> stretch 4 sens + mono-couche (plus frais que doublé kevlar). « just like normal jeans to walk around in ».</div></div>
+      <div class="obj"><div class="q">La taille va être un casse-tête en ligne</div>
+        <div class="a"><b>Preuve :</b> guide des tailles clair + « true to size » + XS–5XL + schéma de placement de l'armure + retours 30 j.</div></div>
+      <div class="obj"><div class="q">Est-ce que ça protège VRAIMENT en chute ?</div>
+        <div class="a"><b>Preuve :</b> science de l'abrasion (0,6 s vs 7 s) + AA = ≤40 mph (usage ville) + récits réels « saved my skin and bones ».</div></div>
+      <div class="obj"><div class="q">Ça va avoir l'air d'un truc de moto / déguisement</div>
+        <div class="a"><b>Preuve :</b> photos lifestyle off-bike (café, bureau) + « nobody realises » + armure fine et discrète.</div></div>
+    </div>
+  </section>
+
+  <footer>
+    <b style="color:var(--ink)">L'idée maîtresse</b> — Protection CE AA <b style="color:var(--acc2)">que personne ne prend pour de l'équipement</b> :
+    sans le look Robocop, sans la chaleur, sans le prix à 300 £. Et voici le certificat.
+    <span class="pill">110+ verbatims réels &amp; sourcés</span>
+    <span class="pill">Zéro invention</span>
+    <span class="pill">Sources : Sportsbikeshop · Roadskin · Pando · MCN · webBikeWorld</span>
+    <br><br>
+    <span style="color:var(--dim)">Détail complet dans les 6 fichiers .md · brut scrapé dans /raw pour vérifier chaque citation.</span>
+  </footer>
+
+</div>
+
+<script>
+  // filtrage verbatims
+  const tabs=document.querySelectorAll('.tab'), vbs=document.querySelectorAll('.vb');
+  tabs.forEach(t=>t.addEventListener('click',()=>{
+    tabs.forEach(x=>x.classList.remove('on')); t.classList.add('on');
+    const f=t.dataset.f;
+    vbs.forEach(v=>{
+      const show = f==='all' || v.dataset.c===f;
+      v.classList.toggle('show', show);
+    });
+  }));
+  // nav highlight au scroll
+  const secs=[...document.querySelectorAll('section[id]')];
+  const links=[...document.querySelectorAll('nav a')];
+  addEventListener('scroll',()=>{
+    let cur=''; secs.forEach(s=>{ if(scrollY>=s.offsetTop-120) cur=s.id; });
+    links.forEach(l=>l.style.color = l.getAttribute('href')==='#'+cur ? 'var(--ink)' : '');
+  });
+</script>
+</body>
+</html>
