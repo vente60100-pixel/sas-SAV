@@ -65,21 +65,21 @@
 
 ## ANGLE 7 — "Real AA, not Amazon fake" (objection prix bas → preuve)
 **Verbatim source :** *"The Cordura tags... were all fake"* / *"fake Cordura and 'CE armor' tags"* (mcgearhub) + *"Most 'moto denim'... wouldn't last three seconds on asphalt"*.
-**Idée FR :** Retourner la méfiance "49,99 £ c'est suspect" : oui méfie-toi du cheap denim moto… c'est POURQUOI on montre le vrai certificat EN 17092.
+**Idée FR :** Retourner la méfiance "59,99 £ c'est suspect" : oui méfie-toi du cheap denim moto… c'est POURQUOI on montre le vrai certificat EN 17092.
 **Hooks EN :**
 - "Half of 'moto denim' fails in 3 seconds. Here's our actual CE EN 17092 AA certificate."
 - "Cheap riding jeans fake the tags. We'll show you the test report."
-- "£49.99 and genuinely CE AA. Read the certificate, not the hype."
+- "£59.99 and genuinely CE AA. Read the certificate, not the hype."
 
 ---
 
 ## ANGLE 8 — "Same protection, not £300" (renversement prix premium)
 **Verbatim source :** *"on the higher end of the price spectrum" ($413)* / *"$464 MSRP"* + *"as protected as I do with my laminates"*.
-**Idée FR :** Le marché habitue l'avatar à 300–460 £ pour de l'AAA. Bastion offre l'AA à 49,99 £ → ancrage par contraste.
+**Idée FR :** Le marché habitue l'avatar à 300–460 £ pour de l'AAA. Bastion offre l'AA à 59,99 £ → ancrage par contraste.
 **Hooks EN :**
-- "CE-rated cargo pants. £49.99 — not £400."
+- "CE-rated cargo pants. £59.99 — not £400."
 - "The £300 jeans protect your legs. So do ours. Spot the price difference."
-- "Why pay £400 to feel as safe? CE AA from £49.99."
+- "Why pay £400 to feel as safe? CE AA from £59.99."
 
 ---
 

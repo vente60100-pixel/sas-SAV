@@ -3,12 +3,12 @@
 
 ---
 
-## OBJ 1 — « 49,99 £ pour du CE AA ? C'est trop pas cher, c'est louche / faux. »
+## OBJ 1 — « 59,99 £ pour du CE AA ? C'est trop pas cher, c'est louche / faux. »
 **Source de la peur :** *"The Cordura tags... were all fake"* · *"fake Cordura and 'CE armor' tags"* (mcgearhub) · *"Most 'moto denim'... wouldn't last three seconds on asphalt"* (itsbetterontheroad).
 **Réponse / preuve à afficher :**
 - Publier **le certificat CE EN 17092 (Class AA)** en image + **numéro de rapport de test + organisme notifié** (cliquable).
 - Photo macro des **panneaux Cordura** aux zones de contact (genoux/hanches/fesses) avec légende.
-- Bandeau "**The £49.99 is a launch offer (RRP £119.99), not the quality.**"
+- Bandeau "**The £59.99 is a launch offer (RRP £119.99), not the quality.**"
 - Comparatif visuel : "Real AA vs fashion 'moto denim' that fails in 3 seconds."
 > Réutiliser en headline FAQ : *"Is this really CE certified at this price?"* → "Yes. Here's the certificate."
 
@@ -79,7 +79,7 @@
 ---
 
 ### Hiérarchie d'impact sur la conversion
-1. **OBJ 1 (prix-bas = faux CE)** → bloquant n°1 vu le positionnement 49,99 £. Preuve = certificat visible.
+1. **OBJ 1 (prix-bas = faux CE)** → bloquant n°1 vu le positionnement 59,99 £. Preuve = certificat visible.
 2. **OBJ 5 (protège vraiment ?)** → la promesse centrale.
 3. **OBJ 4 (taille)** → frein silencieux e-commerce.
 4. **OBJ 2 (marque inconnue)** → avis + garantie.

@@ -5,7 +5,7 @@
 3. Le bénéfice signature, dit par les clients eux-mêmes : *"nobody realises they're not normal jeans unless you tell them."* → **vends l'invisibilité de la protection, pas la protection.**
 4. La vraie peur n'est pas le choc, c'est **la glisse** : *"you're grinding skin in seconds."* Recadre tout sur l'abrasion (CE AA = pile l'usage ville/nationale ≤40 mph).
 5. Le scroll-stopper froid le plus fort = **le chiffre** : jean normal = 0,6 s sur l'asphalte, riding jean = 7 s.
-6. **Le prix 49,99 £ est à double tranchant** : c'est l'arme anti-premium (rivaux à 300–460 £)… mais il déclenche la peur "faux CE type Amazon". → **montrer le certificat EN 17092 est non négociable.**
+6. **Le prix 59,99 £ est à double tranchant** : c'est l'arme anti-premium (rivaux à 300–460 £)… mais il déclenche la peur "faux CE type Amazon". → **montrer le certificat EN 17092 est non négociable.**
 7. Les frustrations concurrentes à exploiter : chaleur/raideur, casse-tête des tailles, armure mal placée → stretch 4 sens, XS–5XL, placement net.
 8. Le déclencheur émotionnel ultime est familial : *"my 3 children still have got a mother."*
 9. Parle leur langue : *came off, slide, road rash, gear, ATGATT* — jamais "lifestyle apparel".

@@ -11,7 +11,7 @@
 - **Usage** : commute quotidien + balade week-end. "Really comfortable and will be my go to for work commutes" (Shamrock, Sportsbikeshop). "ride to dinner or work without carrying a heavy, stiff jacket inside" (bohnarmor).
 - **Moto** : roadster/naked, A2, custom, scooter GT, trail urbain. Vitesses réelles = ville + nationale (30–60 mph). Pile la zone couverte par une **Class AA** ("AA-rated motorcycle jeans handling speeds up to just over 40 mph" — rideadv).
 - **Rapport au risque** : conscient mais pragmatique. Pas un fanatique ATGATT, plutôt "AlmostATGATT". "most people agree that wearing regular jeans is fine for short city rides" (mcgearhub) → c'est exactement la croyance dangereuse que BASTION attaque.
-- **Budget** : refroidi par les prix premium. Les rivaux AAA tournent à 300–460 £/$ ("At 413 USD... on the higher end", "$464 MSRP"). BASTION à **49,99 £** = aubaine… mais qui déclenche un réflexe de méfiance (voir objections).
+- **Budget** : refroidi par les prix premium. Les rivaux AAA tournent à 300–460 £/$ ("At 413 USD... on the higher end", "$464 MSRP"). BASTION à **59,99 £** = aubaine… mais qui déclenche un réflexe de méfiance (voir objections).
 
 **Ce qu'il craint d'avoir l'air d'être** : un cosplayeur. Le verbatim qui résume tout l'avatar :
 > "I want to feel safe, but I don't want to look like a transformer just to bop around Brooklyn"
@@ -25,7 +25,7 @@ Il est coincé entre **deux peurs qui se contredisent** :
 1. **La peur de la chute** : il a vu/entendu ce que l'asphalte fait à la peau ("grinding skin in seconds").
 2. **La peur du ridicule / de la contrainte** : il refuse le look "Power Ranger", refuse de se changer au boulot, refuse d'avoir trop chaud, refuse de payer 300 £.
 
-Résultat par défaut : **il roule en jean normal et se ment** ("regular jeans is fine for short city rides"). BASTION dissout le conflit : protection AA invisible, mettable du lit au bureau, à 49,99 £. **L'avatar n'a plus à choisir.**
+Résultat par défaut : **il roule en jean normal et se ment** ("regular jeans is fine for short city rides"). BASTION dissout le conflit : protection AA invisible, mettable du lit au bureau, à 59,99 £. **L'avatar n'a plus à choisir.**
 
 ---
 
@@ -52,10 +52,10 @@ Croit qu'un jean Levi's le protège. Verbatim de la croyance : "most people agre
 
 ### Niveau B — CONSCIENT DU PROBLÈME, refroidi par les solutions
 Sait qu'il faut un riding jean, mais a été rebuté par : le look gear, la chaleur, le prix, le casse-tête des tailles. Verbatim : "I don't want to look like a transformer", "the higher end of the price spectrum".
-→ **Angle** : "le riding pant que tu ne détestes pas porter". Discrétion + confort + 49,99 £.
+→ **Angle** : "le riding pant que tu ne détestes pas porter". Discrétion + confort + 59,99 £.
 
 ### Niveau C — CONSCIENT DU PRODUIT, mais MÉFIANT
-Voit l'offre BASTION (AA, 49,99 £, marque inconnue) et pense *"trop beau / faux CE / arnaque type Amazon"*. Verbatim de la peur : "The Cordura tags... were all fake", "fake Cordura and 'CE armor' tags".
+Voit l'offre BASTION (AA, 59,99 £, marque inconnue) et pense *"trop beau / faux CE / arnaque type Amazon"*. Verbatim de la peur : "The Cordura tags... were all fake", "fake Cordura and 'CE armor' tags".
 → **Angle** : preuve. Montrer le certificat EN 17092, le numéro de test, la photo des panneaux Cordura, les avis vérifiés. (voir `objections-reponses.md`)
 
 ---
