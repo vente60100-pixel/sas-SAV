@@ -41,3 +41,7 @@ htmlcov/
 node_modules/
 dist/
 build/
+
+# Visuels Walko (références tierces et images générées, hors dépôt)
+refs/
+output/
